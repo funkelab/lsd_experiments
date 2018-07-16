@@ -1,0 +1,10 @@
+snapshots/
+*.hdf
+*.h5
+*.err
+*.out
+*.index
+*.meta
+*.ipynb
+checkpoint
+notes
