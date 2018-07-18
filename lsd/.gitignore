@@ -6,6 +6,8 @@ snapshots/
 *.index
 *.meta
 *.ipynb
+*.pyc
+*.swp
 checkpoint
 notes
 
