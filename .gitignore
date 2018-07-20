@@ -10,3 +10,6 @@ snapshots/
 *.swp
 checkpoint
 notes
+*.log
+*.data*
+*.json
