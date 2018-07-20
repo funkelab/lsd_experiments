@@ -8,5 +8,5 @@ snapshots/
 *.ipynb
 *.pyc
 *.swp
-checkpoint
+*checkpoint*
 notes
