@@ -8,12 +8,15 @@ import math
 import json
 import tensorflow as tf
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/training'
 samples = [
-    'cube01',
-    'cube02',
-    'cube03',
+    'sample_A_padded_20160501.aligned.filled.cropped',
+    'sample_B_padded_20160501.aligned.filled.cropped',
+    'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
 def train_until(max_iteration):
@@ -31,12 +34,14 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
+    artifacts = ArrayKey('ARTIFACTS')
+    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
     affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
     gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
-    voxel_size = Coordinate((8,8,8))
+    voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
 
@@ -57,9 +62,14 @@ def train_until(max_iteration):
             os.path.join(data_dir, sample + '.hdf'),
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids',
-                labels_mask: 'volumes/labels/neuron_ids_mask',
+                labels: 'volumes/labels/neuron_ids_notransparency',
+                labels_mask: 'volumes/labels/mask',
             },
+            array_specs = {
+                raw: ArraySpec(interpolatable=True),
+                labels: ArraySpec(interpolatable=False),
+                labels_mask: ArraySpec(interpolatable=False)
+            }
         ) +
         Normalize(raw) +
         Pad(raw, None) +
@@ -68,19 +78,46 @@ def train_until(max_iteration):
         for sample in samples
     )
 
+    artifact_source = (
+        Hdf5Source(
+            os.path.join(data_dir, 'sample_ABC_padded_20160501.defects.hdf'),
+            datasets = {
+                artifacts: 'defect_sections/raw',
+                artifacts_mask: 'defect_sections/mask',
+            },
+            array_specs = {
+                artifacts: ArraySpec(
+                    voxel_size=(40, 4, 4),
+                    interpolatable=True),
+                artifacts_mask: ArraySpec(
+                    voxel_size=(40, 4, 4),
+                    interpolatable=True),
+            }
+        ) +
+        RandomLocation(min_masked=0.05, mask=artifacts_mask) +
+        Normalize(artifacts) +
+        IntensityAugment(artifacts, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        ElasticAugment(
+            control_point_spacing=[4,40,40],
+            jitter_sigma=[0,2,2],
+            rotation_interval=[0,math.pi/2.0],
+            subsample=8) +
+        SimpleAugment(transpose_only=[1, 2])
+    )
+
 
     train_pipeline = (
         data_sources +
         RandomProvider() +
         ElasticAugment(
-            [40,40,40],
-            [2,2,2],
-            [0,math.pi/2.0],
-            prob_slip=0.01,
-            prob_shift=0.01,
-            max_misalign=1,
+            control_point_spacing=[4,40,40],
+            jitter_sigma=[0,2,2],
+            rotation_interval=[0,math.pi/2.0],
+            prob_slip=0.05,
+            prob_shift=0.05,
+            max_misalign=10,
             subsample=8) +
-        SimpleAugment() +
+        SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
         AddAffinities(
@@ -93,6 +130,16 @@ def train_until(max_iteration):
             gt,
             gt_scale,
             gt_mask) +
+        DefectAugment(
+            raw,
+            prob_missing=0.03,
+            prob_low_contrast=0.01,
+            prob_artifact=0.03,
+            artifact_source=artifact_source,
+            artifacts=artifacts,
+            artifacts_mask=artifacts_mask,
+            contrast_scale=0.5,
+            axis=0) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
@@ -117,6 +164,7 @@ def train_until(max_iteration):
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
+                gt_mask: 'volumes/labels/gt_mask'
             },
             dataset_dtypes={
                 labels: np.uint64
@@ -134,6 +182,6 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
+
     iteration = int(sys.argv[1])
     train_until(iteration)
