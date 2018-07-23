@@ -38,4 +38,4 @@ def create_network(input_shape, output_shape, name):
 
 if __name__ == "__main__":
 
-    create_network((304, 304, 304), (196, 196, 196), 'sd_net')
+    create_network((120, 484, 484), (84, 268, 268), 'sd_net')
