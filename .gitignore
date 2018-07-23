@@ -12,4 +12,4 @@ snapshots/
 notes
 *.log
 *.data*
-
+*.json
