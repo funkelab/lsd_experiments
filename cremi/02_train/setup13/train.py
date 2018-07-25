@@ -19,6 +19,32 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+phase_switch = 10000
+
+with open('train_net_config.json', 'r') as f:
+    config = json.load(f)
+
+def add_malis_loss(graph):
+    affs = graph.get_tensor_by_name(config['affs'])
+    gt_affs = graph.get_tensor_by_name(config['gt_affs'])
+    gt_seg = tf.placeholder(tf.int64, shape=(56, 56, 56), name='gt_seg')
+    gt_affs_mask = graph.get_tensor_by_name(config['affs_loss_weights'])
+
+    loss = malis.malis_loss_op(affs, 
+        gt_affs, 
+        gt_seg,
+        [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+        gt_affs_mask)
+    opt = tf.train.AdamOptimizer(
+        learning_rate=0.5e-4,
+        beta1=0.95,
+        beta2=0.999,
+        epsilon=1e-8,
+        name='malis_optimizer')
+    optimizer = opt.minimize(loss)
+
+    return (loss, optimizer)
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -28,8 +54,11 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net_config.json', 'r') as f:
-        config = json.load(f)
+    if trained_until < phase_switch and max_iteration > phase_switch:
+        train_until(phase_switch)
+
+    phase = 'euclid' if max_iteration <= phase_switch else 'malis'
+    print("Training in phase %s until %i"%(phase, max_iteration))
 
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
@@ -40,6 +69,7 @@ def train_until(max_iteration):
     gt = ArrayKey('GT_AFFINITIES')
     gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
@@ -55,6 +85,7 @@ def train_until(max_iteration):
 
     snapshot_request = BatchRequest({
         affs: request[gt],
+        affs_gradient: request[gt]
     })
 
     data_sources = tuple(
@@ -105,6 +136,18 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2])
     )
 
+    train_inputs = {
+        config['raw']: raw,
+        config['gt_affs']: gt,
+        config['affs_loss_weights']: gt_scale,
+    }
+    if phase == 'euclid':
+        train_loss = config['loss']
+        train_optimizer = config['optimizer']
+    else:
+        train_loss = None
+        train_optimizer = add_malis_loss
+        train_inputs['gt_seg:0'] = labels
 
     train_pipeline = (
         data_sources +
@@ -146,17 +189,15 @@ def train_until(max_iteration):
             num_workers=10) +
         Train(
             'train_net',
-            optimizer=config['optimizer'],
-            loss=config['loss'],
-            inputs={
-                config['raw']: raw,
-                config['gt_affs']: gt,
-                config['affs_loss_weights']: gt_scale,
-            },
+            optimizer=train_optimizer,
+            loss=train_loss,
+            inputs=train_inputs,
             outputs={
                 config['affs']: affs
             },
-            gradients={},
+            gradients={
+                config['affs']: affs_gradient
+            },
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
