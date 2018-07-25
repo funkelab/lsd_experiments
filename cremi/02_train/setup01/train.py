@@ -160,7 +160,7 @@ def train_until(max_iteration):
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
-                raw: 'volumes/raw',
+            raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
@@ -169,7 +169,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

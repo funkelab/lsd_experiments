@@ -160,7 +160,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

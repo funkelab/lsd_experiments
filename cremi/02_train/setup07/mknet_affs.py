@@ -58,6 +58,6 @@ def create_network(input_shape, name):
 
 if __name__ == "__main__":
 
-    create_network((196, 196, 196), 'train_net')
+    create_network((84, 268, 268), 'train_net')
     # TODO: find largest test size
     # create_network((196, 196, 196), 'test_net')
