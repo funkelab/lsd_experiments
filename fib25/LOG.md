@@ -24,3 +24,23 @@ predicting affinities and LSDs together
 
 train setup02 to produce LSDs,
 then predict affinities and LSDs from raw input + LSD predictions from setup02 in an autocontext setup
+
+## setup06
+
+setup01 with MALIS loss
+
+## setup07
+
+setup02 with MALIS loss
+
+## setup08
+
+setup03 with MALIS loss
+
+##setup09
+
+setup04 with MALIS loss
+
+##setup10
+
+setup05 with MALIS loss
