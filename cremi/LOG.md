@@ -1,125 +1,125 @@
-#data
+# data
 
 samples{A, B, C}.hdf from CREMI
 
-#train
+# train
 
-##setup01
+## setup01
 
 affinities, euclidean loss, mala unet, 5 fmul 
 
-##setup02
+## setup02
 
 local shape descriptors, euclidean loss, mala unet, 5 fmul
 
-##setup03
+## setup03
 
 affinities from LSDs, euclidean loss, mala unet, 5 fmul
 
-##setup04
+## setup04
 
 affinities + LSDs, euclidean loss, mala unet, 5 fmul
 
-##setup05
+## setup05
 
 affinities, euclidean loss, larissa's unet, 5 fmul
 
-##setup06
+## setup06
 
 LSDs, euclidean loss, larissa's unet, 5 fmul
 
-##setup07
+## setup07
 
 affinities from LSDs, euclidean loss, larissa's unet, 5 fmul
 
-##setup08
+## setup08
 
 affinities + LSDs , euclidean loss, larissa's unet, 5 fmul
 
-##setup09
+## setup09
 
 affinities, euclidean loss, mala unet, 6 fmul
 
-##setup10
+## setup10
 
 LSDs, euclidean loss, mala unet, 6 fmul
 
-##setup11
+## setup11
 
 affs from LSDs, euclidean loss, mala unet, 6 fmul
 
-##setup12
+## setup12
 
 affs + LSDs, euclidean loss, mala unet, 6 fmul
 
-##setup13
+## setup13
 
 affs, euclidean + malis loss, mala unet, 5 fmul
 
-##setup14
+## setup14
 
 LSDs, euclidean + malis loss, mala unet, 5 fmul
 
-##setup15
+## setup15
 
 affs from LSDs, euclidean + malis loss, mala unet, 5 fmul
 
-##setup16
+## setup16
 
 affs + LSDs, euclidean + malis loss, mala unet, 5 fmul
 
-##setup17
+## setup17
 
 affs, euclidean + malis loss, larissa's unet, 6 fmul
 
-##setup18
+## setup18
 
 LSDs, euclidean + malis loss, larissa's unet, 6 fmul
 
-##setup19
+## setup19
 
 affs from LSDs, euclidean + malis loss, larissa's unet, 6 fmul
 
-##setup20
+## setup20
 
 affs + LSDs, euclidean + malis loss, larissa's unet, 6 fmul
 
-##setup21
+## setup21
 
 affs, euclidean + malis loss, mala unet, 6 fmul
 
-##setup22
+## setup22
 
 LSDs, euclidean + malis loss, mala unet, 6 fmul
 
-##setup23
+## setup23
 
 affs from LSDs, euclidean + malis loss, mala unet, 6 fmul
 
-##setup24
+## setup24
 
 affs + LSDs, euclidean + malis loss, mala unet, 6 fmul
 
-##setup25
+## setup25
 
 long range affs, euclidean loss, mala unet, 5 fmul
 
-##setup26
+## setup26
 
 long range affs, euclidean loss, larissa's unet, 6 fmul
 
-##setup27
+## setup27
 
 long range affs, euclidean loss, mala unet, 6 fmul
 
-##setup28
+## setup28
 
 long range affs, euclidean + malis loss, mala unet, 5 fmul
 
-##setup29
+## setup29
 
 long range affs, euclidean + malis loss, larissa's unet, 6 fmul
 
-##setup30 
+## setup30 
 
 long range affs, euclidean + malis loss, mala unet, 6 fmul
