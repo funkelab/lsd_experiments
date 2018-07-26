@@ -206,9 +206,9 @@ def predict_in_block(
     print("Finished block with config %s..."%config_file)
 
     # if things went well, remove temporary files
-    # os.remove(config_file)
-    # os.remove('%d.out'%config_hash)
-    # os.remove('%d.err'%config_hash)
+    os.remove(config_file)
+    os.remove('%d.out'%config_hash)
+    os.remove('%d.err'%config_hash)
 
 def check_block(out_file, out_dataset, write_roi):
 
