@@ -16,7 +16,7 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
         config = json.load(f)
 
     raw = ArrayKey('RAW')
-    embedding = ArrayKey('EMBEDDING')
+    affs = ArrayKey('AFFS')
 
     voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(config['input_shape'])*voxel_size
@@ -26,7 +26,7 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
-    chunk_request.add(embedding, output_size)
+    chunk_request.add(affs, output_size)
 
     pipeline = (
         N5Source(
@@ -45,19 +45,19 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
                 config['raw']: raw
             },
             outputs={
-                config['embedding']: embedding
+                config['affs']: affs
             },
             # TODO: change to predict graph
             graph=os.path.join(setup_dir, 'train_net.meta')
         ) +
         N5Write(
             dataset_names={
-                embedding: 'volumes/lsds',
+                affs: 'volumes/affs',
             },
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
+        Scan(chunk_request)
     )
 
     print("Starting prediction...")
@@ -69,8 +69,6 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
-    logging.getLogger('gunpowder.nodes.n5_write').setLevel(logging.DEBUG)
-    logging.getLogger('gunpowder.nodes.n5_source').setLevel(logging.DEBUG)
 
     config_file = sys.argv[1]
     with open(config_file, 'r') as f:

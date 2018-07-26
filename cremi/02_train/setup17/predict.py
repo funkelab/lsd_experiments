@@ -15,7 +15,7 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
     with open(os.path.join(setup_dir, 'train_net_config.json'), 'r') as f:
         config = json.load(f)
 
-    raw = ArrayKey('RAW')
+    lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     voxel_size = Coordinate((8, 8, 8))
@@ -25,24 +25,22 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
     write_roi *= voxel_size
 
     chunk_request = BatchRequest()
-    chunk_request.add(raw, input_size)
+    chunk_request.add(lsds, input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
         N5Source(
             in_file,
             datasets = {
-                raw: 'volumes/raw'
+                lsds: 'volumes/lsds'
             },
         ) +
-        Pad(raw, size=None) +
-        Crop(raw, read_roi) +
-        Normalize(raw) +
-        IntensityScaleShift(raw, 2,-1) +
+        Pad(lsds, size=None) +
+        Crop(lsds, read_roi) +
         Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
             inputs={
-                config['raw']: raw
+                config['embedding']: lsds
             },
             outputs={
                 config['affs']: affs
@@ -52,12 +50,12 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
         ) +
         N5Write(
             dataset_names={
-                affs: 'volumes/affs',
+                affs: 'volumes/affs_from_lsds',
             },
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request)
+        Scan(chunk_request, num_workers=10)
     )
 
     print("Starting prediction...")

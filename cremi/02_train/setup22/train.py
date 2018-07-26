@@ -2,13 +2,15 @@ from __future__ import print_function
 import sys
 from gunpowder import *
 from gunpowder.tensorflow import *
-from mala.gunpowder import AddLocalShapeDescriptor
 import malis
 import os
 import math
 import json
 import tensorflow as tf
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/training'
 samples = [
@@ -16,6 +18,25 @@ samples = [
     'sample_B_padded_20160501.aligned.filled.cropped',
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
+
+affinity_neighborhood = np.array([
+    
+    [-1, 0, 0],
+    [0, -1, 0],
+    [0, 0, -1],
+
+    [-2, 0, 0],
+    [0, -3, 0],
+    [0, 0, -3],
+
+    [-3, 0, 0],
+    [0, -9, 0],
+    [0, 0, -9],
+
+    [-4, 0, 0],
+    [0, -27, 0],
+    [0, 0, -27]
+])
 
 def train_until(max_iteration):
 
@@ -34,8 +55,9 @@ def train_until(max_iteration):
     labels_mask = ArrayKey('GT_LABELS_MASK')
     artifacts = ArrayKey('ARTIFACTS')
     artifacts_mask = ArrayKey('ARTIFACTS_MASK')
-    embedding = ArrayKey('PREDICTED_EMBEDDING')
+    affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
+    gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
     voxel_size = Coordinate((40, 4, 4))
@@ -47,10 +69,11 @@ def train_until(max_iteration):
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
     request.add(gt, output_size)
+    request.add(gt_mask, output_size)
     request.add(gt_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt],
+        affs: request[gt],
     })
 
     data_sources = tuple(
@@ -116,12 +139,16 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
-        AddLocalShapeDescriptor(
-            labels,
+        AddAffinities(
+            affinity_neighborhood,
+            labels=labels,
+            affinities=gt,
+            labels_mask=labels_mask,
+            affinities_mask=gt_mask) +
+        BalanceLabels(
             gt,
-            mask=gt_scale,
-            sigma=80,
-            downsample=2) +
+            gt_scale,
+            gt_mask) +
         DefectAugment(
             raw,
             prob_missing=0.03,
@@ -142,20 +169,21 @@ def train_until(max_iteration):
             loss=config['loss'],
             inputs={
                 config['raw']: raw,
-                config['gt_embedding']: gt,
-                config['embedding_loss_weights']: gt_scale,
+                config['gt_affs']: gt,
+                config['affs_loss_weights']: gt_scale,
             },
             outputs={
-                config['embedding']: embedding
+                config['affs']: affs
             },
             gradients={},
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
-                raw: 'volumes/raw',
+            raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
+                gt: 'volumes/labels/gt_affinities',
+                affs: 'volumes/labels/pred_affinities',
+                gt_mask: 'volumes/labels/gt_mask'
             },
             dataset_dtypes={
                 labels: np.uint64

@@ -29,7 +29,7 @@ def create_network(input_shape, name):
     affs_batched, _ = mala.networks.conv_pass(
         unet,
         kernel_sizes=[1],
-        num_fmaps=12,
+        num_fmaps=3,
         activation='sigmoid',
         name='affs')
 

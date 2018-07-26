@@ -2,7 +2,6 @@ from __future__ import print_function
 import sys
 from gunpowder import *
 from gunpowder.tensorflow import *
-from mala.gunpowder import AddLocalShapeDescriptor
 import malis
 import os
 import math
@@ -17,32 +16,6 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
-phase_switch = 10000
-
-with open('train_net_config.json', 'r') as f:
-    config = json.load(f)
-
-def add_malis_loss(graph):
-    embedding = graph.get_tensor_by_name(config['embedding'])
-    gt_embedding = graph.get_tensor_by_name(config['gt_embedding'])
-    gt_seg = tf.placeholder(tf.int64, shape=(56, 56, 56), name='gt_seg')
-    gt_embedding_mask = graph.get_tensor_by_name(config['embedding_loss_weights'])
-
-    loss = malis.malis_loss_op(embedding, 
-        gt_embedding, 
-        gt_seg,
-        [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
-        gt_embedding_mask)
-    opt = tf.train.AdamOptimizer(
-        learning_rate=0.5e-4,
-        beta1=0.95,
-        beta2=0.999,
-        epsilon=1e-8,
-        name='malis_optimizer')
-    optimizer = opt.minimize(loss)
-
-    return (loss, optimizer)
-
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -52,35 +25,38 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    if trained_until < phase_switch and max_iteration > phase_switch:
-        train_until(phase_switch)
-
-    phase = 'euclid' if max_iteration <= phase_switch else 'malis'
-    print("Training in phase %s until %i"%(phase, max_iteration))
-
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     artifacts = ArrayKey('ARTIFACTS')
     artifacts_mask = ArrayKey('ARTIFACTS_MASK')
-    embedding = ArrayKey('PREDICTED_EMBEDDING')
+    embedding = ArrayKey('EMBEDDING')
+    affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
+    gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
-    embedding_gradient = ArrayKey('EMBEDDING_GRADIENT')
+
+    with open('sd_net_config.json', 'r') as f:
+        sd_config = json.load(f)
+    with open('train_net_config.json', 'r') as f:
+        affs_config = json.load(f)
 
     voxel_size = Coordinate((40, 4, 4))
-    input_size = Coordinate(config['input_shape'])*voxel_size
-    output_size = Coordinate(config['output_shape'])*voxel_size
+    input_size = Coordinate(sd_config['input_shape'])*voxel_size
+    embedding_size = Coordinate(affs_config['input_shape'])*voxel_size
+    output_size = Coordinate(affs_config['output_shape'])*voxel_size
 
     request = BatchRequest()
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
+    request.add(embedding, embedding_size)
     request.add(gt, output_size)
+    request.add(gt_mask, output_size)
     request.add(gt_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt],
+        affs: request[gt],
     })
 
     data_sources = tuple(
@@ -131,19 +107,6 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2])
     )
 
-    train_inputs = {
-        config['raw']: raw,
-        config['gt_embedding']: gt,
-        config['embedding_loss_weights']: gt_scale,
-    }
-    if phase == 'euclid':
-        train_loss = config['loss']
-        train_optimizer = config['optimizer']
-    else:
-        train_loss = None
-        train_optimizer = add_malis_loss
-        train_inputs['gt_seg:0'] = labels
-
 
     train_pipeline = (
         data_sources +
@@ -159,12 +122,16 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
-        AddLocalShapeDescriptor(
-            labels,
+        AddAffinities(
+            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            labels=labels,
+            affinities=gt,
+            labels_mask=labels_mask,
+            affinities_mask=gt_mask) +
+        BalanceLabels(
             gt,
-            mask=gt_scale,
-            sigma=80,
-            downsample=2) +
+            gt_scale,
+            gt_mask) +
         DefectAugment(
             raw,
             prob_missing=0.03,
@@ -179,29 +146,41 @@ def train_until(max_iteration):
         PreCache(
             cache_size=40,
             num_workers=10) +
+        Predict(
+            checkpoint='../setup02/train_net_checkpoint_400000',
+            graph='sd_net.meta',
+            inputs={
+                sd_config['raw']: raw
+            },
+            outputs={
+                sd_config['embedding']: embedding
+            }) +
         Train(
             'train_net',
-            optimizer=train_optimizer,
-            loss=train_loss,
-            inputs=train_inputs,
+            optimizer=affs_config['optimizer'],
+            loss=affs_config['loss'],
+            inputs={
+                affs_config['embedding']: embedding,
+                affs_config['gt_affs']: gt,
+                affs_config['affs_loss_weights']: gt_scale,
+            },
             outputs={
-                config['embedding']: embedding
+                affs_config['affs']: affs
             },
-            gradients={
-                config['embedding']: embedding_gradient
-            },
+            gradients={},
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
+                embedding: 'volumes/embedding',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
+                gt: 'volumes/labels/gt_affinities',
+                affs: 'volumes/labels/pred_affinities',
             },
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=1000,
+            every=100,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

@@ -27,7 +27,7 @@ with open('train_net_config.json', 'r') as f:
 def add_malis_loss(graph):
     affs = graph.get_tensor_by_name(config['affs'])
     gt_affs = graph.get_tensor_by_name(config['gt_affs'])
-    gt_seg = tf.placeholder(tf.int64, shape=(56, 56, 56), name='gt_seg')
+    gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
     gt_affs_mask = graph.get_tensor_by_name(config['affs_loss_weights'])
 
     loss = malis.malis_loss_op(affs, 

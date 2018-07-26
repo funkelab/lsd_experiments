@@ -19,25 +19,6 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
-affinity_neighborhood = np.array([
-    
-    [-1, 0, 0],
-    [0, -1, 0],
-    [0, 0, -1],
-
-    [-2, 0, 0],
-    [0, -3, 0],
-    [0, 0, -3],
-
-    [-3, 0, 0],
-    [0, -9, 0],
-    [0, 0, -9],
-
-    [-4, 0, 0],
-    [0, -27, 0],
-    [0, 0, -27]
-])
-
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -140,7 +121,7 @@ def train_until(max_iteration):
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
         AddAffinities(
-            affinity_neighborhood,
+            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
             labels=labels,
             affinities=gt,
             labels_mask=labels_mask,
@@ -188,7 +169,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -201,6 +182,6 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
+
     iteration = int(sys.argv[1])
     train_until(iteration)
