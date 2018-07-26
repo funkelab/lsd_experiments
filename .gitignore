@@ -1,6 +1,7 @@
 snapshots/
 *.hdf
 *.h5
+*.n5
 *.err
 *.out
 *.index
