@@ -28,7 +28,8 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    alpha_mask = ArrayKey('ALPHA_MASK')
+    artifacts = ArrayKey('ARTIFACTS')
+    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
     embedding = ArrayKey('EMBEDDING')
     affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
@@ -66,6 +67,11 @@ def train_until(max_iteration):
                 labels: 'volumes/labels/neuron_ids_notransparency',
                 labels_mask: 'volumes/labels/mask',
             },
+            array_specs = {
+                raw: ArraySpec(interpolatable=True),
+                labels: ArraySpec(interpolatable=False),
+                labels_mask: ArraySpec(interpolatable=False)
+            }
         ) +
         Normalize(raw) +
         Pad(raw, None) +
@@ -78,27 +84,42 @@ def train_until(max_iteration):
         Hdf5Source(
             os.path.join(data_dir, 'sample_ABC_padded_20160501.defects.hdf'),
             datasets = {
-                raw: 'defect_sections/raw',
-                alpha_mask: 'defect_sections/mask',
+                artifacts: 'defect_sections/raw',
+                artifacts_mask: 'defect_sections/mask',
             },
-            volume_specs = {
-                raw: VolumeSpec(voxel_size=(40, 4, 4)),
-                alpha_mask: VolumeSpec(voxel_size=(40, 4, 4)),
+            array_specs = {
+                artifacts: ArraySpec(
+                    voxel_size=(40, 4, 4),
+                    interpolatable=True),
+                artifacts_mask: ArraySpec(
+                    voxel_size=(40, 4, 4),
+                    interpolatable=True),
             }
         ) +
-        RandomLocation(min_masked=0.05, mask_volume_type=alpha_mask) +
-        Normalize() +
-        IntensityAugment(0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
-        ElasticAugment([4,40,40], [0,2,2], [0,math.pi/2.0], subsample=8) +
-        SimpleAugment(transpose_only_xy=True)
+        RandomLocation(min_masked=0.05, mask=artifacts_mask) +
+        Normalize(artifacts) +
+        IntensityAugment(artifacts, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        ElasticAugment(
+            control_point_spacing=[4,40,40],
+            jitter_sigma=[0,2,2],
+            rotation_interval=[0,math.pi/2.0],
+            subsample=8) +
+        SimpleAugment(transpose_only=[1, 2])
     )
 
 
     train_pipeline = (
         data_sources +
         RandomProvider() +
-        ElasticAugment([4,40,40], [0,2,2], [0,math.pi/2.0], prob_slip=0.05,prob_shift=0.05,max_misalign=10, subsample=8) +
-        SimpleAugment(transpose_only_xy=True) +
+        ElasticAugment(
+            control_point_spacing=[4,40,40],
+            jitter_sigma=[0,2,2],
+            rotation_interval=[0,math.pi/2.0],
+            prob_slip=0.05,
+            prob_shift=0.05,
+            max_misalign=10,
+            subsample=8) +
+        SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
         AddAffinities(
@@ -112,17 +133,21 @@ def train_until(max_iteration):
             gt_scale,
             gt_mask) +
         DefectAugment(
+            raw,
             prob_missing=0.03,
             prob_low_contrast=0.01,
             prob_artifact=0.03,
             artifact_source=artifact_source,
-            contrast_scale=0.5) +
+            artifacts=artifacts,
+            artifacts_mask=artifacts_mask,
+            contrast_scale=0.5,
+            axis=0) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup02/train_net_checkpoint_400000',
+            checkpoint='../setup06/train_net_checkpoint_400000',
             graph='sd_net.meta',
             inputs={
                 sd_config['raw']: raw
