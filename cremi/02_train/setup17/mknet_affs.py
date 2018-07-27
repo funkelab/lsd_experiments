@@ -9,7 +9,22 @@ def create_network(input_shape, name):
     embedding = tf.placeholder(tf.float32, shape=(10,) + input_shape)
     embedding_batched = tf.reshape(embedding, (1, 10) + input_shape)
 
-    unet, _, _ = mala.networks.unet(embedding_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
+    unet, _, _ = mala.networks.unet(
+        embedding_batched,
+        12, 6,
+        [[1, 3, 3], [1, 3, 3], [3, 3, 3]],
+        [
+            [(1, 3, 3), (1, 3, 3)],
+            [(1, 3, 3), (1, 3, 3)],
+            [(3, 3, 3), (3, 3, 3)],
+            [(3, 3, 3), (3, 3, 3)]
+        ],
+        [
+            [(1, 3, 3), (1, 3, 3)],
+            [(1, 3, 3), (1, 3, 3)],
+            [(3, 3, 3), (3, 3, 3)],
+            [(3, 3, 3), (3, 3, 3)]
+        ])
 
     affs_batched, _ = mala.networks.conv_pass(
         unet,
