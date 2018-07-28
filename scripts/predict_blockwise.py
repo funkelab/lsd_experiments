@@ -73,7 +73,8 @@ def predict_blockwise(
     # get absolute paths
     setup = os.path.abspath(os.path.join(train_dir, setup))
     in_file = os.path.abspath(os.path.join(data_dir, sample))
-    out_file = os.path.abspath(os.path.join(predict_dir, sample))
+    out_file = os.path.abspath(
+        os.path.join(predict_dir, sample.replace('hdf', 'n5')))
 
     # from here on, all values are in world units (unless explicitly mentioned)
 
