@@ -7,19 +7,35 @@ def get_dataset(filename, dataset):
     if filename.endswith('h5') or filename.endswith('hdf'):
 
         ds = h5py.File(filename)[dataset]
+        if 'offset' in ds.attrs:
+            offset = ds.attrs['offset']
+        else:
+            offset = [0, 0, 0]
+        if 'resolution' in ds.attrs:
+            resolution = ds.attrs['resolution']
+        else:
+            resolution = [1, 1, 1]
         return (
             ds,
-            peach.Coordinate(ds.attrs['offset']),
-            peach.Coordinate(ds.attrs['resolution'])
+            peach.Coordinate(offset),
+            peach.Coordinate(resolution)
         )
 
     elif filename.endswith('n5'):
 
         ds = z5py.File(filename)[dataset]
+        if 'offset' in ds.attrs:
+            offset = ds.attrs['offset']
+        else:
+            offset = [0, 0, 0]
+        if 'resolution' in ds.attrs:
+            resolution = ds.attrs['resolution']
+        else:
+            resolution = [1, 1, 1]
         return (
             ds,
-            peach.Coordinate(ds.attrs['offset'][::-1]),
-            peach.Coordinate(ds.attrs['resolution'][::-1])
+            peach.Coordinate(offset[::-1]),
+            peach.Coordinate(resolution[::-1])
         )
 
     else:
