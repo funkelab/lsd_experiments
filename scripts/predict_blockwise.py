@@ -79,6 +79,8 @@ def predict_blockwise(
 
     # get ROI of source
     source, source_offset, voxel_size = get_dataset(in_file, 'volumes/raw')
+    print("Source dataset has shape %s, offset %s, voxel size %s"%(
+        source.shape, source_offset, voxel_size))
     source_roi = peach.Roi(
         source_offset,
         voxel_size*source.shape[-3:])
@@ -91,7 +93,7 @@ def predict_blockwise(
     chunk_size = net_output_size
     context = (net_input_size - net_output_size)/2
 
-    print("Following sizes in world untis:")
+    print("Following sizes in world units:")
     print("net input size  = %s"%(net_input_size,))
     print("net output size = %s"%(net_output_size,))
     print("context         = %s"%(net_output_size,))
@@ -108,7 +110,7 @@ def predict_blockwise(
     block_read_roi = peach.Roi((0, 0, 0), block_input_size) - context
     block_write_roi = peach.Roi((0, 0, 0), block_output_size)
 
-    print("Following ROIs in world untis:")
+    print("Following ROIs in world units:")
     print("Total input ROI  = %s"%input_roi)
     print("Block read  ROI  = %s"%block_read_roi)
     print("Block write ROI  = %s"%block_write_roi)
@@ -127,8 +129,11 @@ def predict_blockwise(
             chunks=(out_dims,) + tuple(chunk_size/voxel_size),
             dtype='float32',
             compression='gzip')
-        ds.attrs['resolution'] = voxel_size
+        ds.attrs['resolution'] = voxel_size[::-1]
         ds.attrs['offset'] = source_roi.get_begin()[::-1]
+        print("Created new dataset with shape %s, chunk size %s"%(
+            output_roi.get_shape()/voxel_size,
+            chunk_size/voxel_size))
 
     print("Starting block-wise processing...")
 
@@ -217,6 +222,8 @@ def check_block(out_file, out_dataset, write_roi):
     # TODO: check for empty chunks instead of voxel values
 
     ds, offset, voxel_size = get_dataset(out_file, out_dataset)
+    print("Target dataset has shape %s, offset %s, voxel size %s"%(
+        ds.shape, offset, voxel_size))
 
     # convert write_roi to voxels within ds
     write_roi -= offset
