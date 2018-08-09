@@ -17,6 +17,8 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -41,6 +43,7 @@ def train_until(max_iteration):
     gt_affs = ArrayKey('GT_AFFINITIES')
     gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
@@ -59,6 +62,7 @@ def train_until(max_iteration):
     snapshot_request = BatchRequest({
         embedding: request[gt_embedding],
         affs: request[gt_affs],
+        affs_gradient: request[gt_affs]
     })
 
     data_sources = tuple(
@@ -123,7 +127,7 @@ def train_until(max_iteration):
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddLocalShapeDescriptor(
             labels,
             gt_embedding,
@@ -131,7 +135,7 @@ def train_until(max_iteration):
             sigma=80,
             downsample=2) +
         AddAffinities(
-            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            neighborhood,
             labels=labels,
             affinities=gt_affs,
             labels_mask=labels_mask,
@@ -169,16 +173,22 @@ def train_until(max_iteration):
                 config['embedding']: embedding,
                 config['affs']: affs
             },
-            gradients={},
+            gradients={
+                config['affs']: affs_gradient
+            },
+            summary=config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt_embedding: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
-                gt_affs: 'volumes/labels/gt_affinities',
-                affs: 'volumes/labels/pred_affinities',
+                gt_embedding: 'volumes/gt_embedding',
+                embedding: 'volumes/pred_embedding',
+                gt_affs: 'volumes/gt_affinities',
+                affs: 'volumes/pred_affinities',
+                labels_mask: 'volumes/labels/mask',
+                affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
                 labels: np.uint64
