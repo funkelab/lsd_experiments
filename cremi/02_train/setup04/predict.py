@@ -2,23 +2,33 @@ from __future__ import print_function
 from gunpowder import *
 from gunpowder.tensorflow import *
 import json
+import logging
+import numpy as np
 import os
 import sys
-import logging
+import z5py
+
+setup_dir = os.path.dirname(os.path.realpath(__file__))
+
+with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+    net_config = json.load(f)
+
+# voxels
+input_shape = Coordinate(net_config['input_shape'])
+output_shape = Coordinate(net_config['output_shape'])
+context = (input_shape - output_shape)//2
+print("Context is %s"%(context,))
+
+# nm
+voxel_size = Coordinate((40, 4, 4))
+context_nm = context*voxel_size
+input_size = input_shape*voxel_size
+output_size = output_shape*voxel_size
 
 def predict(iteration, in_file, read_roi, out_file, out_dataset):
 
-    setup_dir = os.path.dirname(os.path.realpath(__file__))
-
-    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
-        config = json.load(f)
-
     raw = ArrayKey('RAW')
     affs = ArrayKey('AFFS')
-
-    voxel_size = Coordinate((40, 4, 4))
-    input_size = Coordinate(config['input_shape'])*voxel_size
-    output_size = Coordinate(config['output_shape'])*voxel_size
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
@@ -41,10 +51,10 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
         Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
             inputs={
-                config['raw']: raw
+                net_config['raw']: raw
             },
             outputs={
-                config['affs']: affs
+                net_config['affs']: affs
             },
             graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
@@ -54,8 +64,8 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
             },
             output_filename=out_file
         ) +
-        PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
+        # PrintProfilingStats(every=10) +
+        Scan(chunk_request, num_workers=1)
     )
 
     print("Starting prediction...")
@@ -74,15 +84,33 @@ if __name__ == "__main__":
 
     config_file = sys.argv[1]
     with open(config_file, 'r') as f:
-        config = json.load(f)
+        run_config = json.load(f)
 
     read_roi = Roi(
-        config['read_begin'],
-        config['read_size'])
+        run_config['read_begin'],
+        run_config['read_size'])
+    write_roi = read_roi.grow(-context_nm, -context_nm)
+
+    print("Read ROI in nm is %s"%read_roi)
+    print("Write ROI in nm is %s"%write_roi)
+
+    out_file = run_config['out_file']
+    out_dataset = run_config['out_dataset']
+
+    f = z5py.File(out_file, use_zarr_format=False, mode='w')
+    if out_dataset not in f:
+        ds = f.create_dataset(
+            out_dataset,
+            shape=(3,) + (write_roi//voxel_size).get_shape(),
+            chunks=(3,) + output_shape,
+            compression='gzip',
+            dtype=np.float32)
+        ds.attrs['resolution'] = voxel_size[::-1]
+        ds.attrs['offset'] = write_roi.get_begin()[::-1]
 
     predict(
-        config['iteration'],
-        config['in_file'],
+        run_config['iteration'],
+        run_config['in_file'],
         read_roi,
-        config['out_file'],
-        config['out_dataset'])
+        out_file,
+        out_dataset)
