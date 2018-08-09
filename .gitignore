@@ -15,3 +15,4 @@ notes
 *.data*
 *.json
 !fib19/03_predict/setup04/*.json
+log/
