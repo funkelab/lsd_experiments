@@ -141,7 +141,7 @@ def agglomerate(
             rag_provider,
             block_size,
             context,
-            merge_function='OneMinus<MeanAffinity<RegionGraphType, ScoreValue>>',
+            merge_function='OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256>>',
             threshold=1.0,
             num_workers=num_workers):
             break
