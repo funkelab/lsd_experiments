@@ -43,7 +43,7 @@ def extract_segmentation(
 
     # but for now we use voxel coordindates
     total_roi = peach.Roi(
-        offset/voxel_size,
+        (0,)*len(voxel_size),
         fragments_ds.shape)
     fragments = peach.Array(
         fragments_ds,
@@ -68,13 +68,20 @@ def extract_segmentation(
 
     # store segmentation
     print("Writing segmentation...")
-    ds = f.create_dataset(
+    ds = peach.prepare_ds(
+        filename,
         'volumes/segmentation',
-        data=fragments.data,
-        compression='gzip')
-    ds.attrs['offset'] = offset[::-1]
-    ds.attrs['resolution'] = voxel_size[::-1]
-    ds.attrs['threshold'] = threshold
+        total_roi*voxel_size + offset,
+        voxel_size,
+        fragments.data.dtype)
+    ds.data[:] = fragments.data
+    # ds = f.create_dataset(
+        # 'volumes/segmentation',
+        # data=fragments.data,
+        # compression='gzip')
+    # ds.attrs['offset'] = offset[::-1]
+    # ds.attrs['resolution'] = voxel_size[::-1]
+    # ds.attrs['threshold'] = threshold
 
 if __name__ == "__main__":
 
