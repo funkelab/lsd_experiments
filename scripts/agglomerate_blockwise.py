@@ -18,7 +18,8 @@ def agglomerate(
         block_size,
         context,
         num_workers,
-        retry):
+        retry,
+        fragments_in_xy=False):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
 
@@ -124,7 +125,8 @@ def agglomerate(
             block_size,
             context,
             fragments,
-            num_workers):
+            num_workers,
+            fragments_in_xy):
             break
 
         if i < retry:
