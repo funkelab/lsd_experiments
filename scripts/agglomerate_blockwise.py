@@ -7,6 +7,7 @@ import sys
 import z5py
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
@@ -72,8 +73,8 @@ def agglomerate(
 
     if not os.path.isdir(os.path.join(in_file, affs_ds)):
         raise RuntimeError(
-            "No affinity predictions found for %s, %s, %s"%(
-                experiment, setup, iteration))
+            "No affinity predictions found for %s, %s, %s (no %s)"%(
+                experiment, setup, iteration, os.path.join(in_file, affs_ds)))
 
     print("Reding affs from %s"%in_file)
 
