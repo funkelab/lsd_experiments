@@ -50,6 +50,10 @@ def agglomerate(
 
             The context to consider for fragment extraction and agglomeration.
 
+        db_name (``string``):
+
+            The name of the MongoDB database to use.
+
         num_workers (``int``):
 
             How many blocks to run in parallel.
@@ -70,7 +74,6 @@ def agglomerate(
     affs_ds = 'volumes/affs'
     out_file = in_file
     fragments_ds = 'volumes/fragments'
-    rag_db = os.path.join(predict_dir, sample + '.db')
 
     if not os.path.isdir(os.path.join(in_file, affs_ds)):
         raise RuntimeError(
@@ -114,7 +117,7 @@ def agglomerate(
             "%s"%(fragments.chunks, block_size,))
 
     # open RAG DB
-    rag_provider = lsd.persistence.SqliteRagProvider(rag_db, 'r+')
+    rag_provider = lsd.persistence.MongoDbRagProvider(db_name, 'r+')
 
     # extract fragments in parallel
     for i in range(retry + 1):

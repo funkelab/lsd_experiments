@@ -15,6 +15,7 @@ def extract_segmentation(
         setup,
         iteration,
         sample,
+        db_name,
         threshold):
 
     experiment_dir = '../' + experiment
@@ -51,13 +52,12 @@ def extract_segmentation(
         (1, 1, 1))
 
     # open RAG DB
-    rag_db = os.path.join(predict_dir, sample + '.db')
-    rag_provider = lsd.persistence.SqliteRagProvider(rag_db, 'r')
+    rag_provider = lsd.persistence.MongoDbRagProvider(db_name, 'r')
 
     # slice
     print("Reading fragments and RAG in %s"%total_roi)
     fragments = fragments[total_roi]
-    rag = rag_provider[total_roi.to_slices()]
+    rag = rag_provider[total_roi]
 
     print("Number of fragments: %d"%(len(np.unique(fragments.data))))
     print("Number of nodes in RAG: %d"%(len(rag.nodes())))
