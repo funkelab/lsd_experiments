@@ -139,20 +139,19 @@ def predict_blockwise(
     print("Starting block-wise processing...")
 
     # process block-wise
-    peach.run_with_dask(
+    peach.run_blockwise(
         input_roi,
         block_read_roi,
         block_write_roi,
-        process_function=lambda r, w: predict_in_block(
+        process_function=lambda b: predict_in_block(
             experiment,
             setup,
             iteration,
             in_file,
             out_file,
             out_dataset,
-            r,
-            w),
-        check_function=lambda w: check_block(out_file, out_dataset, w),
+            b),
+        check_function=lambda b: check_block(out_file, out_dataset, b),
         num_workers=num_workers,
         processes=False,
         read_write_conflict=False)
@@ -164,11 +163,13 @@ def predict_in_block(
         in_file,
         out_file,
         out_dataset,
-        read_roi,
-        write_roi):
+        block):
 
     setup_dir = os.path.join('..', experiment, '02_train', setup)
     predict_script = os.path.abspath(os.path.join(setup_dir, 'predict.py'))
+
+    read_roi = block.read_roi
+    write_roi = block.write_roi
 
     print("Predicting in %s"%write_roi)
 
@@ -216,7 +217,9 @@ def predict_in_block(
     os.remove('%d.out'%config_hash)
     os.remove('%d.err'%config_hash)
 
-def check_block(out_file, out_dataset, write_roi):
+def check_block(out_file, out_dataset, block):
+
+    write_roi = block.write_roi.copy()
 
     print("Checking if block %s is complete..."%write_roi)
 
