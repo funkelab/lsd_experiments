@@ -17,6 +17,8 @@ def agglomerate(
         sample,
         block_size,
         context,
+        db_host,
+        db_name,
         num_workers,
         retry,
         fragments_in_xy=False):
@@ -49,6 +51,10 @@ def agglomerate(
         context (``tuple`` of ``int``):
 
             The context to consider for fragment extraction and agglomeration.
+
+        db_host (``string``):
+
+            Where to find the MongoDB server.
 
         db_name (``string``):
 
@@ -117,7 +123,10 @@ def agglomerate(
             "%s"%(fragments.chunks, block_size,))
 
     # open RAG DB
-    rag_provider = lsd.persistence.MongoDbRagProvider(db_name, 'r+')
+    rag_provider = lsd.persistence.MongoDbRagProvider(
+        db_name,
+        host=db_host,
+        mode='r+')
 
     # extract fragments in parallel
     for i in range(retry + 1):

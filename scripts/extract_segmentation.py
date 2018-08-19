@@ -8,13 +8,14 @@ import z5py
 import numpy as np
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
+# logging.getLogger('lsd.persistence.mongodb_rag_provider').setLevel(logging.DEBUG)
 
 def extract_segmentation(
         experiment,
         setup,
         iteration,
         sample,
+        db_host,
         db_name,
         threshold):
 
@@ -52,7 +53,10 @@ def extract_segmentation(
         (1, 1, 1))
 
     # open RAG DB
-    rag_provider = lsd.persistence.MongoDbRagProvider(db_name, 'r')
+    rag_provider = lsd.persistence.MongoDbRagProvider(
+        db_name,
+        host=db_host,
+        mode='r')
 
     # slice
     print("Reading fragments and RAG in %s"%total_roi)
@@ -61,6 +65,7 @@ def extract_segmentation(
 
     print("Number of fragments: %d"%(len(np.unique(fragments.data))))
     print("Number of nodes in RAG: %d"%(len(rag.nodes())))
+    print("Number of edges in RAG: %d"%(len(rag.edges())))
 
     # create a segmentation
     print("Merging...")
