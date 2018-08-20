@@ -1,3 +1,4 @@
+import h5py
 import json
 import logging
 import lsd
@@ -98,7 +99,10 @@ def agglomerate(
         print("Reding mask from %s"%sample_file)
 
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
-        f = h5py.File(sample_file)
+
+        # HACK: this is only needed because for cremi, we have the original
+        # samples in HDF5
+        f = h5py.File(sample_file.replace('.n5', '.hdf'))
         if 'volumes/mask' not in f:
             raise RuntimeError(
                 "Masking requested, but no 'volumes/mask' found in %s"%
