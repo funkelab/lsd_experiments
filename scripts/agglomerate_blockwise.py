@@ -21,7 +21,8 @@ def agglomerate(
         db_name,
         num_workers,
         retry,
-        fragments_in_xy=False):
+        fragments_in_xy=False,
+        mask_fragments=False):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
 
@@ -67,9 +68,15 @@ def agglomerate(
         retry (``int``):
 
             How many times to retry failed tasks.
+
+        mask_fragments (``bool``):
+
+            Whether to mask fragments for a specified region. Requires that the
+            original sample dataset contains a dataset ``volumes/mask``.
     '''
 
     experiment_dir = '../' + experiment
+    data_dir = os.path.join(experiment_dir, '01_data')
     predict_dir = os.path.join(
         experiment_dir,
         '03_predict',
@@ -85,6 +92,18 @@ def agglomerate(
         raise RuntimeError(
             "No affinity predictions found for %s, %s, %s (no %s)"%(
                 experiment, setup, iteration, os.path.join(in_file, affs_ds)))
+
+    if mask_fragments:
+
+        print("Reding mask from %s"%sample_file)
+
+        sample_file = os.path.abspath(os.path.join(data_dir, sample))
+        f = h5py.File(sample_file)
+        if 'volumes/mask' not in f:
+            raise RuntimeError(
+                "Masking requested, but no 'volumes/mask' found in %s"%
+                sample_file)
+        mask = ['volumes/mask']
 
     print("Reding affs from %s"%in_file)
 
@@ -138,7 +157,8 @@ def agglomerate(
             context,
             fragments,
             num_workers,
-            fragments_in_xy):
+            fragments_in_xy,
+            mask=mask):
             break
 
         if i < retry:
