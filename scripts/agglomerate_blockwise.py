@@ -1,14 +1,13 @@
-import h5py
 import json
 import logging
 import lsd
 import numpy as np
 import os
+import peach
 import sys
-import z5py
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
@@ -48,11 +47,12 @@ def agglomerate(
 
         block_size (``tuple`` of ``int``):
 
-            The size of one block in voxels.
+            The size of one block in world units.
 
         context (``tuple`` of ``int``):
 
-            The context to consider for fragment extraction and agglomeration.
+            The context to consider for fragment extraction and agglomeration,
+            in world units.
 
         db_host (``string``):
 
@@ -77,7 +77,6 @@ def agglomerate(
     '''
 
     experiment_dir = '../' + experiment
-    data_dir = os.path.join(experiment_dir, '01_data')
     predict_dir = os.path.join(
         experiment_dir,
         '03_predict',
@@ -89,67 +88,36 @@ def agglomerate(
     out_file = in_file
     fragments_ds = 'volumes/fragments'
 
-    if not os.path.isdir(os.path.join(in_file, affs_ds)):
-        raise RuntimeError(
-            "No affinity predictions found for %s, %s, %s (no %s)"%(
-                experiment, setup, iteration, os.path.join(in_file, affs_ds)))
+    logging.info("Reading affs from %s", in_file)
+    affs = peach.open_ds(in_file, affs_ds, mode='r')
 
     if mask_fragments:
 
-        print("Reding mask from %s"%sample_file)
-
+        logging.info("Reading mask from %s", sample_file)
+        data_dir = os.path.join(experiment_dir, '01_data')
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
-
-        # HACK: this is only needed because for cremi, we have the original
-        # samples in HDF5
-        f = h5py.File(sample_file.replace('.n5', '.hdf'))
-        if 'volumes/mask' not in f:
-            raise RuntimeError(
-                "Masking requested, but no 'volumes/mask' found in %s"%
-                sample_file)
-        mask = ['volumes/mask']
-
-    print("Reding affs from %s"%in_file)
-
-    # open affs
-    affs = z5py.File(in_file, use_zarr_format=False, mode='r')[affs_ds]
-
-    print("Read affs with shape %s"%(affs.shape,))
-
-    # open or create fragments dataset
-    if not os.path.isdir(os.path.join(out_file, fragments_ds)):
-
-        print("Creating new fragments dataset in %s"%out_file)
-
-        with z5py.File(out_file, use_zarr_format=False, mode='r+') as f:
-            fragments = f.create_dataset(
-                fragments_ds,
-                shape=affs.shape[1:],
-                chunks=block_size,
-                dtype=np.uint64,
-                compression='gzip')
-            fragments.attrs['offset'] = affs.attrs['offset']
-            fragments.attrs['resolution'] = affs.attrs['resolution']
+        mask = peach.open_ds(sample_file, 'volumes/mask', mode='r')
 
     else:
 
-        print("Re-using existing fragments dataset in %s"%out_file)
+        mask = None
 
-        # check if output dataset is what we expect
-        fragments = z5py.File(out_file, use_zarr_format=False, mode='r+')[fragments_ds]
-
-        assert fragments.shape==affs.shape[1:], (
-            "Existing fragments dataset has different shape than input "
-            "volume.")
-        assert tuple(fragments.chunks)==tuple(block_size), (
-            "Existing fragments dataset has chunk size %s different from "
-            "%s"%(fragments.chunks, block_size,))
+    # prepare fragments dataset
+    fragments = peach.prepare_ds(
+        out_file,
+        fragments_ds,
+        affs.roi,
+        affs.voxel_size,
+        np.uint64,
+        peach.Roi((0, 0, 0), block_size))
 
     # open RAG DB
+    logging.info("Opening RAG DB...")
     rag_provider = lsd.persistence.MongoDbRagProvider(
         db_name,
         host=db_host,
-        mode='r+')
+        mode='w')
+    logging.info("RAG DB opened")
 
     # extract fragments in parallel
     for i in range(retry + 1):
@@ -166,7 +134,7 @@ def agglomerate(
             break
 
         if i < retry:
-            print("parallel_watershed failed, retrying %d/%d"%(i + 1, retry))
+            logging.error("parallel_watershed failed, retrying %d/%d", i + 1, retry)
 
     # agglomerate in parallel
     for i in range(retry + 1):
@@ -183,7 +151,7 @@ def agglomerate(
             break
 
         if i < retry:
-            print("parallel_aff_agglomerate failed, retrying %d/%d"%(i + 1, retry))
+            logging.error("parallel_aff_agglomerate failed, retrying %d/%d", i + 1, retry)
 
 if __name__ == "__main__":
 
