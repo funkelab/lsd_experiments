@@ -3,7 +3,7 @@ import logging
 import lsd
 import numpy as np
 import os
-import peach
+import daisy
 import sys
 
 logging.basicConfig(level=logging.INFO)
@@ -89,7 +89,7 @@ def agglomerate(
     fragments_ds = 'volumes/fragments'
 
     logging.info("Reading affs from %s", in_file)
-    affs = peach.open_ds(in_file, affs_ds, mode='r')
+    affs = daisy.open_ds(in_file, affs_ds, mode='r')
 
     if mask_fragments:
 
@@ -128,20 +128,20 @@ def agglomerate(
         logging.info("Reading mask from %s", sample_file)
         data_dir = os.path.join(experiment_dir, '01_data')
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
-        mask = peach.open_ds(sample_file, 'volumes/labels/mask', mode='r')
+        mask = daisy.open_ds(sample_file, 'volumes/labels/mask', mode='r')
 
     else:
 
         mask = None
 
     # prepare fragments dataset
-    fragments = peach.prepare_ds(
+    fragments = daisy.prepare_ds(
         out_file,
         fragments_ds,
         affs.roi,
         affs.voxel_size,
         np.uint64,
-        peach.Roi((0, 0, 0), block_size))
+        daisy.Roi((0, 0, 0), block_size))
 
     # open RAG DB
     logging.info("Opening RAG DB...")

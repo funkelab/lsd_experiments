@@ -3,11 +3,11 @@ import json
 import logging
 import numpy as np
 import os
-import peach
+import daisy
 import sys
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('peach.blocks').setLevel(logging.DEBUG)
+# logging.getLogger('daisy.blocks').setLevel(logging.DEBUG)
 
 def predict_blockwise(
         experiment,
@@ -76,15 +76,15 @@ def predict_blockwise(
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source = peach.open_ds(in_file, 'volumes/raw')
+    source = daisy.open_ds(in_file, 'volumes/raw')
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.offset, source.voxel_size))
 
     # get chunk size and context
     with open(os.path.join(setup, 'test_net_config.json')) as f:
         net_config = json.load(f)
-    net_input_size = peach.Coordinate(net_config['input_shape'])*source.voxel_size
-    net_output_size = peach.Coordinate(net_config['output_shape'])*source.voxel_size
+    net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
+    net_output_size = daisy.Coordinate(net_config['output_shape'])*source.voxel_size
     chunk_size = net_output_size
     context = (net_input_size - net_output_size)/2
 
@@ -102,8 +102,8 @@ def predict_blockwise(
     output_roi = source.roi
 
     # create read and write ROI
-    block_read_roi = peach.Roi((0, 0, 0), block_input_size) - context
-    block_write_roi = peach.Roi((0, 0, 0), block_output_size)
+    block_read_roi = daisy.Roi((0, 0, 0), block_input_size) - context
+    block_write_roi = daisy.Roi((0, 0, 0), block_output_size)
 
     print("Following ROIs in world units:")
     print("Total input ROI  = %s"%input_roi)
@@ -113,18 +113,18 @@ def predict_blockwise(
 
     print("Preparing output dataset...")
 
-    ds = peach.prepare_ds(
+    ds = daisy.prepare_ds(
         out_file,
         out_dataset,
         output_roi,
         source.voxel_size,
         np.float32,
-        peach.Roi((0, 0, 0), chunk_size))
+        daisy.Roi((0, 0, 0), chunk_size))
 
     print("Starting block-wise processing...")
 
     # process block-wise
-    peach.run_blockwise(
+    daisy.run_blockwise(
         input_roi,
         block_read_roi,
         block_write_roi,
@@ -183,7 +183,7 @@ def predict_in_block(
 
     print("Running block with config %s..."%config_file)
 
-    peach.call([
+    daisy.call([
         'run_lsf',
         '-c', '2',
         '-g', '1',
@@ -206,7 +206,7 @@ def check_block(out_file, out_dataset, block):
 
     print("Checking if block %s is complete..."%block.write_roi)
 
-    ds = peach.open_ds(out_file, out_dataset)
+    ds = daisy.open_ds(out_file, out_dataset)
     center_values = ds[block.write_roi.get_center()]
     s = np.sum(center_values)
     print("Sum of center values in %s is %f"%(block.write_roi, s))

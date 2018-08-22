@@ -2,7 +2,7 @@ import json
 import logging
 import lsd
 import os
-import peach
+import daisy
 import sys
 
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +27,7 @@ def extract_segmentation(
     filename = os.path.join(predict_dir, sample)
 
     # open fragments
-    fragments = peach.open_ds(filename, 'volumes/fragments')
+    fragments = daisy.open_ds(filename, 'volumes/fragments')
 
     # open RAG DB
     rag_provider = lsd.persistence.MongoDbRagProvider(
@@ -51,7 +51,7 @@ def extract_segmentation(
 
     # store segmentation
     print("Writing segmentation...")
-    segmentation = peach.prepare_ds(
+    segmentation = daisy.prepare_ds(
         filename,
         'volumes/segmentation',
         fragments.roi,
