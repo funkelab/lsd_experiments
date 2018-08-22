@@ -1,4 +1,3 @@
-import h5py
 import json
 import logging
 import lsd
@@ -73,7 +72,7 @@ def agglomerate(
         mask_fragments (``bool``):
 
             Whether to mask fragments for a specified region. Requires that the
-            original sample dataset contains a dataset ``volumes/mask``.
+            original sample dataset contains a dataset ``volumes/labels/mask``.
     '''
 
     experiment_dir = '../' + experiment
@@ -96,18 +95,15 @@ def agglomerate(
 
     if mask_fragments:
 
-        print("Reding mask from %s"%sample_file)
-
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
+        print("Reading mask from %s"%sample_file)
 
-        # HACK: this is only needed because for cremi, we have the original
-        # samples in HDF5
-        f = h5py.File(sample_file.replace('.n5', '.hdf'))
-        if 'volumes/mask' not in f:
+        f = z5py.File(sample_file)
+        if 'volumes/labels/mask' not in f:
             raise RuntimeError(
-                "Masking requested, but no 'volumes/mask' found in %s"%
+                "Masking requested, but no 'volumes/labels/mask' found in %s"%
                 sample_file)
-        mask = ['volumes/mask']
+        mask = f['volumes/labels/mask']
 
     print("Reding affs from %s"%in_file)
 
