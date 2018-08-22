@@ -93,7 +93,6 @@ def agglomerate(
 
     if mask_fragments:
 
-<<<<<<< HEAD
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
         print("Reading mask from %s"%sample_file)
 
@@ -125,12 +124,11 @@ def agglomerate(
                 compression='gzip')
             fragments.attrs['offset'] = affs.attrs['offset']
             fragments.attrs['resolution'] = affs.attrs['resolution']
-=======
+
         logging.info("Reading mask from %s", sample_file)
         data_dir = os.path.join(experiment_dir, '01_data')
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
-        mask = peach.open_ds(sample_file, 'volumes/mask', mode='r')
->>>>>>> 2eeb677574484420cf04d4ade5a667c5938abf53
+        mask = peach.open_ds(sample_file, 'volumes/labels/mask', mode='r')
 
     else:
 
