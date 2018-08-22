@@ -1,5 +1,3 @@
-from processes import call
-from datasets import get_dataset
 import hashlib
 import json
 import logging
@@ -7,7 +5,6 @@ import numpy as np
 import os
 import peach
 import sys
-import z5py
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('peach.blocks').setLevel(logging.DEBUG)
@@ -79,18 +76,15 @@ def predict_blockwise(
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source, source_offset, voxel_size = get_dataset(in_file, 'volumes/raw')
-    print("Source dataset has shape %s, offset %s, voxel size %s"%(
-        source.shape, source_offset, voxel_size))
-    source_roi = peach.Roi(
-        source_offset,
-        voxel_size*source.shape[-3:])
+    source = peach.open_ds(in_file, 'volumes/raw')
+    print("Source dataset has shape %s, ROI %s, voxel size %s"%(
+        source.shape, source.offset, source.voxel_size))
 
     # get chunk size and context
     with open(os.path.join(setup, 'test_net_config.json')) as f:
         net_config = json.load(f)
-    net_input_size = peach.Coordinate(net_config['input_shape'])*voxel_size
-    net_output_size = peach.Coordinate(net_config['output_shape'])*voxel_size
+    net_input_size = peach.Coordinate(net_config['input_shape'])*source.voxel_size
+    net_output_size = peach.Coordinate(net_config['output_shape'])*source.voxel_size
     chunk_size = net_output_size
     context = (net_input_size - net_output_size)/2
 
@@ -104,8 +98,8 @@ def predict_blockwise(
     block_input_size = block_output_size + context*2
 
     # get total input and output ROIs
-    input_roi = source_roi.grow(context, context)
-    output_roi = source_roi
+    input_roi = source.roi.grow(context, context)
+    output_roi = source.roi
 
     # create read and write ROI
     block_read_roi = peach.Roi((0, 0, 0), block_input_size) - context
@@ -117,24 +111,15 @@ def predict_blockwise(
     print("Block write ROI  = %s"%block_write_roi)
     print("Total output ROI = %s"%output_roi)
 
-    print("Preparing output datasets...")
+    print("Preparing output dataset...")
 
-    if not os.path.isdir(out_file):
-        os.makedirs(out_file)
-
-    out = z5py.File(out_file, use_zarr_format=False)
-    if not out_dataset in out:
-        ds = out.create_dataset(
-            out_dataset,
-            shape=(out_dims,) + output_roi.get_shape()/voxel_size,
-            chunks=(out_dims,) + tuple(chunk_size/voxel_size),
-            dtype='float32',
-            compression='gzip')
-        ds.attrs['resolution'] = voxel_size[::-1]
-        ds.attrs['offset'] = source_roi.get_begin()[::-1]
-        print("Created new dataset with shape %s, chunk size %s"%(
-            output_roi.get_shape()/voxel_size,
-            chunk_size/voxel_size))
+    ds = peach.prepare_ds(
+        out_file,
+        out_dataset,
+        output_roi,
+        source.voxel_size,
+        np.float32,
+        peach.Roi((0, 0, 0), chunk_size))
 
     print("Starting block-wise processing...")
 
@@ -198,7 +183,7 @@ def predict_in_block(
 
     print("Running block with config %s..."%config_file)
 
-    call([
+    peach.call([
         'run_lsf',
         '-c', '2',
         '-g', '1',
@@ -219,26 +204,12 @@ def predict_in_block(
 
 def check_block(out_file, out_dataset, block):
 
-    write_roi = block.write_roi.copy()
+    print("Checking if block %s is complete..."%block.write_roi)
 
-    print("Checking if block %s is complete..."%write_roi)
-
-    # TODO: check for empty chunks instead of voxel values
-
-    ds, offset, voxel_size = get_dataset(out_file, out_dataset)
-    print("Target dataset has shape %s, offset %s, voxel size %s"%(
-        ds.shape, offset, voxel_size))
-
-    # convert write_roi to voxels within ds
-    write_roi -= offset
-    write_roi /= voxel_size
-
-    # get center voxel
-    center = write_roi.get_center()
-    center_values = ds[:, center[0], center[1], center[2]]
-
+    ds = peach.open_ds(out_file, out_dataset)
+    center_values = ds[block.write_roi.get_center()]
     s = np.sum(center_values)
-    print("Sum of center values in %s is %f"%(write_roi, s))
+    print("Sum of center values in %s is %f"%(block.write_roi, s))
 
     return s != 0
 
