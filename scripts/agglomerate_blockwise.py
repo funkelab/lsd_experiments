@@ -93,38 +93,6 @@ def agglomerate(
 
     if mask_fragments:
 
-        sample_file = os.path.abspath(os.path.join(data_dir, sample))
-        print("Reading mask from %s"%sample_file)
-
-        f = z5py.File(sample_file)
-        if 'volumes/labels/mask' not in f:
-            raise RuntimeError(
-                "Masking requested, but no 'volumes/labels/mask' found in %s"%
-                sample_file)
-        mask = f['volumes/labels/mask']
-
-    print("Reding affs from %s"%in_file)
-
-    # open affs
-    affs = z5py.File(in_file, use_zarr_format=False, mode='r')[affs_ds]
-
-    print("Read affs with shape %s"%(affs.shape,))
-
-    # open or create fragments dataset
-    if not os.path.isdir(os.path.join(out_file, fragments_ds)):
-
-        print("Creating new fragments dataset in %s"%out_file)
-
-        with z5py.File(out_file, use_zarr_format=False, mode='r+') as f:
-            fragments = f.create_dataset(
-                fragments_ds,
-                shape=affs.shape[1:],
-                chunks=block_size,
-                dtype=np.uint64,
-                compression='gzip')
-            fragments.attrs['offset'] = affs.attrs['offset']
-            fragments.attrs['resolution'] = affs.attrs['resolution']
-
         logging.info("Reading mask from %s", sample_file)
         data_dir = os.path.join(experiment_dir, '01_data')
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
