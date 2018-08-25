@@ -17,7 +17,8 @@ def predict_blockwise(
         out_dataset,
         out_dims,
         block_size_in_chunks,
-        num_workers):
+        num_workers,
+        raw_dataset='volumes/raw'):
     '''Run prediction in parallel blocks. Within blocks, predict in chunks.
 
     Args:
@@ -56,6 +57,11 @@ def predict_blockwise(
         num_workers (``int``):
 
             How many blocks to run in parallel.
+
+        raw_dataset (``string``, optional):
+
+            The path to the raw dataset in the sample file. Defaults to
+            `volumes/raw`.
     '''
 
     experiment_dir = '../' + experiment
@@ -71,14 +77,16 @@ def predict_blockwise(
     setup = os.path.abspath(os.path.join(train_dir, setup))
     in_file = os.path.abspath(os.path.join(data_dir, sample))
     out_file = os.path.abspath(
-        os.path.join(predict_dir, sample.replace('hdf', 'n5')))
+        os.path.join(
+            predict_dir,
+            sample.replace('hdf', 'n5').replace('json', 'n5')))
 
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source = daisy.open_ds(in_file, 'volumes/raw')
+    source = daisy.open_ds(in_file, raw_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
-        source.shape, source.offset, source.voxel_size))
+        source.shape, source.roi, source.voxel_size))
 
     # get chunk size and context
     with open(os.path.join(setup, 'test_net_config.json')) as f:
@@ -119,7 +127,8 @@ def predict_blockwise(
         output_roi,
         source.voxel_size,
         np.float32,
-        daisy.Roi((0, 0, 0), chunk_size))
+        write_roi=daisy.Roi((0, 0, 0), chunk_size),
+        num_channels=out_dims)
 
     print("Starting block-wise processing...")
 
@@ -133,6 +142,7 @@ def predict_blockwise(
             setup,
             iteration,
             in_file,
+            raw_dataset,
             out_file,
             out_dataset,
             b),
@@ -146,6 +156,7 @@ def predict_in_block(
         setup,
         iteration,
         in_file,
+        raw_dataset,
         out_file,
         out_dataset,
         block):
@@ -158,11 +169,17 @@ def predict_in_block(
 
     print("Predicting in %s"%write_roi)
 
+    if in_file.endswith('.json'):
+        with open(in_file, 'r') as f:
+            spec = json.load(f)
+            in_file = spec['container']
+
     config = {
         'experiment': experiment,
         'setup': setup,
         'iteration': iteration,
         'in_file': in_file,
+        'raw_dataset': raw_dataset,
         'read_begin': read_roi.get_begin(),
         'read_size': read_roi.get_shape(),
         'out_file': out_file,
@@ -185,9 +202,9 @@ def predict_in_block(
 
     daisy.call([
         'run_lsf',
-        '-c', '2',
+        '-c', '5',
         '-g', '1',
-        '-d', 'funkey/lsd:v0.1',
+        '-d', 'funkey/lsd:v0.3',
         'python -u %s %s'%(
             predict_script,
             config_file
