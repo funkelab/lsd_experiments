@@ -93,9 +93,9 @@ def agglomerate(
 
     if mask_fragments:
 
-        logging.info("Reading mask from %s", sample_file)
         data_dir = os.path.join(experiment_dir, '01_data')
         sample_file = os.path.abspath(os.path.join(data_dir, sample))
+        logging.info("Reading mask from %s", sample_file)
         mask = daisy.open_ds(sample_file, 'volumes/labels/mask', mode='r')
 
     else:
