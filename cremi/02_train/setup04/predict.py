@@ -71,7 +71,7 @@ def predict(
             output_filename=out_file
         ) +
         # PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=1)
+        Scan(chunk_request, num_workers=10)
     )
 
     print("Starting prediction...")
