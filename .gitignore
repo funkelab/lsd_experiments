@@ -1,4 +1,5 @@
 snapshots/
+01_data/
 *.hdf
 *.h5
 *.n5

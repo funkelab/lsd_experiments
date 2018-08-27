@@ -122,7 +122,7 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
         GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
             neighborhood,
@@ -168,7 +168,7 @@ def train_until(max_iteration):
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
-            raw: 'volumes/raw',
+                raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/gt_affinities',
                 affs: 'volumes/pred_affinities',
