@@ -103,7 +103,7 @@ if __name__ == "__main__":
     out_file = run_config['out_file']
     out_dataset = run_config['out_dataset']
 
-    f = z5py.File(out_file, use_zarr_format=False, mode='w')
+    f = z5py.File(out_file, use_zarr_format=False, mode='r+')
     if out_dataset not in f:
         ds = f.create_dataset(
             out_dataset,
