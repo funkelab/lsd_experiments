@@ -128,7 +128,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='/groups/funke/home/funkej/workspace/projects/lsd/run/fib19/02_train/setup02/train_net_checkpoint_150000',
+            checkpoint='../setup02/train_net_checkpoint_100000',
             graph='sd_net.meta',
             inputs={
                 sd_config['raw']: raw
@@ -167,7 +167,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100,
+            every=10000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

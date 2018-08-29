@@ -31,6 +31,9 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
             datasets = {
                 raw: 'volumes/raw'
             },
+            array_specs = {
+                raw: ArraySpec(voxel_size=voxel_size)
+            },
         ) +
         Pad(raw, size=None) +
         Crop(raw, read_roi) +
@@ -53,7 +56,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
+        Scan(chunk_request, num_workers=1)
     )
 
     print("Starting prediction...")
