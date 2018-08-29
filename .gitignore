@@ -6,6 +6,7 @@ snapshots/
 *.err
 *.out
 *.index
+*.config
 *.meta
 *.ipynb
 *.pyc
