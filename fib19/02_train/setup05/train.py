@@ -127,7 +127,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='/groups/funke/funkelab/debd/lsd_experiments/fib19/02_train/setup02/train_net_checkpoint_100000',
+            checkpoint='/groups/funke/funkelab/debd/lsd_experiments/fib19/02_train/setup02/train_net_checkpoint_200000',
             graph='sd_net.meta',
             inputs={
                 sd_config['raw']: raw
