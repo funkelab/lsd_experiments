@@ -76,7 +76,7 @@ def whitelist(
     # remove nonwhitelisted neurons in parallel
     logging.info("Starting whitelisting tasks")
     for i in range(retry + 1):
-
+        # TODO: check function
         if daisy.run_blockwise(
             total_roi,
             read_roi,
@@ -86,7 +86,6 @@ def whitelist(
                 b,
                 seg_out,
                 whitelist),
-            lambda b: block_done(seg_out, b, whitelist),
             num_workers=num_workers,
             read_write_conflict=False):
                 break
@@ -95,15 +94,17 @@ def whitelist(
             logging.error("parallel whitelisting failed, retrying %d/%d", i + 1, retry)
 
 def whitelist_in_block(seg, block, seg_out, whitelist):
-    seg_data = np.uint64(seg[block.read_roi].data)
+    seg_data = np.uint64(seg.intersect(block.read_roi).data)
+    logging.debug("Sum of values in block {0} before whitelisting: {1}".format(block.read_roi, np.sum(seg_data)))
     logging.info("Whitelisting in block {0}".format(block.read_roi))
     # remove nonwhitelisted neurons from current block
     seg_data[np.isin(seg_data, whitelist, invert=True)] = 0
-    seg_out[block.write_roi].data = seg_data
-    logging.debug("Sum of values in block {0}: {1}".format(block.read_roi, np.sum(seg_out[block.write_roi].data)))
+    logging.debug("Sum of values in block {0} after whitelisting: {1}".format(block.read_roi, np.sum(seg_data)))
+    seg_out[block.write_roi] = daisy.Array(seg_data, block.write_roi, seg.voxel_size)
 
 def block_done(seg_out, block, whitelist):
-    return np.all(np.isin(seg_out[block.write_roi].data, whitelist))
+    # TODO
+    return False
 
 if __name__ == "__main__":
 
