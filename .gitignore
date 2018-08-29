@@ -3,6 +3,7 @@ snapshots/
 *.hdf
 *.h5
 *.n5
+*.db
 *.err
 *.out
 *.index
@@ -18,3 +19,4 @@ notes
 *.json
 !fib19/03_predict/setup04/*.json
 log/
+dask-worker-space
