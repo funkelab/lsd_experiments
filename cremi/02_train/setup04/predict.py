@@ -25,7 +25,13 @@ context_nm = context*voxel_size
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
-def predict(iteration, in_file, read_roi, out_file, out_dataset):
+def predict(
+        iteration,
+        in_file,
+        raw_dataset,
+        read_roi,
+        out_file,
+        out_dataset):
 
     raw = ArrayKey('RAW')
     affs = ArrayKey('AFFS')
@@ -38,7 +44,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
         Hdf5Source(
             in_file,
             datasets = {
-                raw: 'volumes/raw'
+                raw: raw_dataset
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
@@ -65,7 +71,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
             output_filename=out_file
         ) +
         # PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=1)
+        Scan(chunk_request, num_workers=10)
     )
 
     print("Starting prediction...")
@@ -97,7 +103,7 @@ if __name__ == "__main__":
     out_file = run_config['out_file']
     out_dataset = run_config['out_dataset']
 
-    f = z5py.File(out_file, use_zarr_format=False, mode='w')
+    f = z5py.File(out_file, use_zarr_format=False, mode='r+')
     if out_dataset not in f:
         ds = f.create_dataset(
             out_dataset,
@@ -107,10 +113,16 @@ if __name__ == "__main__":
             dtype=np.float32)
         ds.attrs['resolution'] = voxel_size[::-1]
         ds.attrs['offset'] = write_roi.get_begin()[::-1]
+    if 'raw_dataset' in run_config:
+        raw_dataset = run_config['raw_dataset']
+    else:
+        raw_dataset = 'volumes/raw'
+
 
     predict(
         run_config['iteration'],
         run_config['in_file'],
+        raw_dataset,
         read_roi,
         out_file,
         out_dataset)
