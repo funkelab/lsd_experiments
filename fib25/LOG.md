@@ -37,10 +37,10 @@ setup02 with MALIS loss
 
 setup03 with MALIS loss
 
-##setup09
+## setup09
 
 setup04 with MALIS loss
 
-##setup10
+## setup10
 
 setup05 with MALIS loss
