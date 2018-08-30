@@ -3,6 +3,7 @@ import daisy
 import json
 import logging
 import lsd
+import malis
 import numpy as np
 import os
 import scipy
@@ -78,6 +79,23 @@ def evaluate(
             float(border_threshold)/gt.voxel_size[1])
         gt.data[z][border_mask] = 0
 
+    print('Created 2d border mask')
+
+    #relabel connected components
+    components = gt.data
+    dtype = components.dtype
+    simple_neighborhood = malis.mknhood3d()
+    affs_from_components = malis.seg_to_affgraph(
+            components,
+            simple_neighborhood
+            )
+    components, _ = malis.connected_components_affgraph(
+            affs_from_components,
+            simple_neighborhood
+            )
+    gt.data = components.astype(dtype)
+
+    print('Relabeled connected components')
     for threshold in thresholds:
 
         segmentation = fragments.data.copy()
