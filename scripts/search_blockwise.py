@@ -95,7 +95,7 @@ def nonzero_in_block(vol, epsilon, block, results):
     num_total = np.float64(vol_data.size)
     proportion_zero = 1.0 - (num_nonzero / num_total)
     # determine search success state
-    if proportion_zero < epsilon:
+    if proportion_zero <= epsilon:
         results.add(str(block.read_roi))
         logging.info("Positive result in block {0}".format(block.read_roi))
 
