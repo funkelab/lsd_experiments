@@ -7,8 +7,6 @@ import sys
 import csv
 
 logging.basicConfig(level=logging.DEBUG)
-# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
-# logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def whitelist(
         whitelist_file,
@@ -68,7 +66,7 @@ def whitelist(
              seg.voxel_size,
              np.uint64,
              daisy.Roi((0, 0, 0), block_size))
-    logging.info("Reading whitelist dataset from {0}".format(out_file))
+    logging.info("Storing whitelisted segmentations to {0}".format(out_file))
     total_roi = seg.roi
     read_roi = daisy.Roi((0,)*seg.roi.dims(), block_size)
     write_roi = daisy.Roi((0,)*seg.roi.dims(), block_size)
