@@ -8,7 +8,7 @@ import csv
 
 logging.basicConfig(level=logging.DEBUG)
 
-def search(
+def scan(
         in_file,
         in_ds,
         out_file,
@@ -77,6 +77,7 @@ def search(
             logging.error("parallel search failed, retrying %d/%d", i + 1, retry)
 
     # write results to file
+    print("Storing {0} results".format())
     with open(out_file, 'w') as f:
         [f.write(r + "\n") for r in results]
 
@@ -106,4 +107,4 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         config = json.load(f)
 
-    search(**config)
+    scan(**config)
