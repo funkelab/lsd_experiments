@@ -77,7 +77,7 @@ def scan(
             logging.error("parallel search failed, retrying %d/%d", i + 1, retry)
 
     # write results to file
-    print("Storing {0} results".format())
+    print("Storing {0} results".format(len(results)))
     with open(out_file, 'w') as f:
         [f.write(r + "\n") for r in results]
 
