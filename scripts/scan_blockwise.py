@@ -7,6 +7,7 @@ import sys
 import csv
 
 logging.basicConfig(level=logging.DEBUG)
+    
 
 def scan(
         in_file,
@@ -51,11 +52,13 @@ def scan(
 
     # prepare results storage
     # TODO: use a database maybe?
-    results = set()
     logging.info("Storing all results to {0}".format(out_file))
     total_roi = vol.roi
     read_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
     write_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
+    # create/reset file
+    f = open(out_file, 'w')
+    f.close()
 
     # scan blocks in parallel
     logging.info("Starting scan tasks")
@@ -68,20 +71,16 @@ def scan(
             lambda b: nonzero_in_block(
                 vol,
                 b,
-                results),
+                out_file),
             num_workers=num_workers,
             read_write_conflict=False):
                 break
 
         if i < retry:
             logging.error("parallel search failed, retrying %d/%d", i + 1, retry)
+    f.close()
 
-    # write results to file
-    print("Storing {0} results".format(len(results)))
-    with open(out_file, 'w') as f:
-        [f.write(r + "\n") for r in results]
-
-def nonzero_in_block(vol, block, results):
+def nonzero_in_block(vol, block, out_file):
     """
     Stores block ROI string and proportion nonzero elements in block to
     results.
@@ -93,7 +92,8 @@ def nonzero_in_block(vol, block, results):
     num_total = np.float64(vol_data.size)
     proportion_nonzero = (num_nonzero / num_total)
     # store block results
-    results.add("{0}, {1}".format(block.read_roi, proportion_nonzero))
+    with open(out_file, 'a') as f:
+        f.write("{0}; {1}\n".format(block.read_roi, proportion_nonzero))
     logging.info("Block {0}: {1}".format(block.read_roi, proportion_nonzero))
 
 def block_done(seg_out, block, whitelist):
