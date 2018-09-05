@@ -3,6 +3,7 @@ import daisy
 import json
 import logging
 import lsd
+import malis
 import numpy as np
 import os
 import scipy
@@ -69,14 +70,52 @@ def evaluate(
     gt = gt[common_roi]
     print("Cropped fragments and GT to common ROI %s"%common_roi)
 
+    #relabel connected components
+    components = gt.data
+    dtype = components.dtype
+    simple_neighborhood = malis.mknhood3d()
+    affs_from_components = malis.seg_to_affgraph(
+            components,
+            simple_neighborhood
+            )
+    components, _ = malis.connected_components_affgraph(
+            affs_from_components,
+            simple_neighborhood
+            )
     # curate GT
-    gt.data[gt.data>np.uint64(-10)] = 0
+    components[gt.data>np.uint64(-10)] = 0
+    gt.data = components.astype(dtype)
+
+    print('Relabeled connected components')
+   
+   #check connected components
+    '''print("Writing connected components gt...")
+    ground_truth = daisy.prepare_ds(
+        predict_file,
+        'volumes/gt_connected_components',
+        gt.roi,
+        gt.voxel_size,
+        gt.data.dtype)
+    ground_truth.data[:] = gt.data'''
+
 
     for z in range(gt.data.shape[0]):
         border_mask = create_border_mask_2d(
             gt.data[z],
             float(border_threshold)/gt.voxel_size[1])
         gt.data[z][border_mask] = 0
+
+    print('Created 2d border mask')
+    
+    #check border mask
+    '''print("Writing border mask gt...")
+    ground_truth = daisy.prepare_ds(
+        predict_file,
+        'volumes/gt_border_mask',
+        gt.roi,
+        gt.voxel_size,
+        gt.data.dtype)
+    ground_truth.data[:] = gt.data'''
 
     for threshold in thresholds:
 
@@ -85,6 +124,16 @@ def evaluate(
         # create a segmentation
         print("Creating segmentation for threshold %f..."%threshold)
         rag.get_segmentation(threshold, segmentation)
+
+        # store segmentation
+        '''print("Writing segmentation...")
+        seg = daisy.prepare_ds(
+            predict_file,
+            'volumes/segmentation',
+            fragments.roi,
+            fragments.voxel_size,
+            fragments.data.dtype)
+        seg.data[:] = segmentation.data'''
 
         #get VOI and RAND
         print("Calculating VOI scores for threshold %f..."%threshold)
