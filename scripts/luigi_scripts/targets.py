@@ -77,7 +77,9 @@ class MongoDbCollectionTarget(luigi.Target):
 
     def exists(self):
 
-        client = pymongo.MongoClient(db_host)
-        db = client[db_name]
+        print("Host %s, DB %s, collection %s"%(self.db_host, self.db_name,
+            self.collection))
+        client = pymongo.MongoClient(self.db_host)
+        db = client[self.db_name]
 
-        return collection in db
+        return self.collection in db

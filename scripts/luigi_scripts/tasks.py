@@ -1,13 +1,7 @@
-import glob
 import luigi
 import os
-import socket
-import sys
-import waterz
 import itertools
 import json
-from redirect_output import *
-from shared_resource import *
 from targets import *
 from subprocess import check_call
 
@@ -102,7 +96,7 @@ class ProcessTask(luigi.Task):
                 'out_dims': 3 if self.predict_type == 'affs' else 10, # TODO: add long range affs
                 'block_size_in_chunks': [8, 8, 8], # == 512 chunks
                 'num_workers': 8, # TODO: maybe make parameter of this task
-                'raw_dataset': 'volumes/raw'): # TODO: for Dip, we'll need raw/s0
+                'raw_dataset': 'volumes/raw' # TODO: for Dip, we'll need raw/s0
             })
 
         os.chdir(os.path.join(base_dir, 'scripts'))
@@ -163,7 +157,7 @@ class ExtractFragments(luigi.Task):
                 'setup': self.setup,
                 'iteration': self.iteration,
                 'sample': self.sample,
-                'block_size': self.block_size
+                'block_size': self.block_size,
                 'context': self.context,
                 'db_host': db_host,
                 'db_name': db_name,
@@ -244,7 +238,7 @@ class Agglomerate(luigi.Task):
                 'setup': self.setup,
                 'iteration': self.iteration,
                 'sample': self.sample,
-                'block_size': self.block_size
+                'block_size': self.block_size,
                 'context': self.context,
                 'db_host': db_host,
                 'db_name': db_name,
@@ -363,12 +357,12 @@ class EvaluateCombinations(luigi.task.WrapperTask):
         # get all the values to explode
         range_values = {
             k[:-1]: v
-            for k, v in self.parameters.iteritems()
+            for k, v in self.parameters.items()
             if k in self.range_keys }
 
         other_values = {
             k: v
-            for k, v in self.parameters.iteritems()
+            for k, v in self.parameters.items()
             if k not in self.range_keys }
 
         range_keys = range_values.keys()
