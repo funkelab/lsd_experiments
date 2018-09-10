@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
-def agglomerate(
+def extract_fragments(
         experiment,
         setup,
         iteration,
@@ -19,7 +19,9 @@ def agglomerate(
         context,
         db_host,
         db_name,
-        num_workers):
+        num_workers,
+        fragments_in_xy=False,
+        mask_fragments=False):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
 
@@ -62,6 +64,15 @@ def agglomerate(
         num_workers (``int``):
 
             How many blocks to run in parallel.
+
+        fragments_in_xy (``bool``):
+
+            Extract fragments section-wise.
+
+        mask_fragments (``bool``):
+
+            Whether to mask fragments for a specified region. Requires that the
+            original sample dataset contains a dataset ``volumes/labels/mask``.
     '''
 
     experiment_dir = '../' + experiment
@@ -79,27 +90,44 @@ def agglomerate(
     logging.info("Reading affs from %s", in_file)
     affs = daisy.open_ds(in_file, affs_ds, mode='r')
 
-    logging.info("Reading fragments from %s", in_file)
-    fragments = daisy.open_ds(in_file, fragments_ds, mode='r')
+    if mask_fragments:
+
+        data_dir = os.path.join(experiment_dir, '01_data')
+        sample_file = os.path.abspath(os.path.join(data_dir, sample))
+        logging.info("Reading mask from %s", sample_file)
+        mask = daisy.open_ds(sample_file, 'volumes/labels/mask', mode='r')
+
+    else:
+
+        mask = None
+
+    # prepare fragments dataset
+    fragments = daisy.prepare_ds(
+        out_file,
+        fragments_ds,
+        affs.roi,
+        affs.voxel_size,
+        np.uint64,
+        daisy.Roi((0, 0, 0), block_size))
 
     # open RAG DB
     logging.info("Opening RAG DB...")
     rag_provider = lsd.persistence.MongoDbRagProvider(
         db_name,
         host=db_host,
-        mode='r+')
+        mode='w')
     logging.info("RAG DB opened")
 
-    # agglomerate in parallel
-    lsd.parallel_aff_agglomerate(
+    # extract fragments in parallel
+    lsd.parallel_watershed(
         affs,
-        fragments,
         rag_provider,
         block_size,
         context,
-        merge_function='OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256>>',
-        threshold=1.0,
-        num_workers=num_workers)
+        fragments,
+        num_workers,
+        fragments_in_xy,
+        mask=mask)
 
 if __name__ == "__main__":
 
@@ -108,4 +136,4 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         config = json.load(f)
 
-    agglomerate(**config)
+    extract_fragments(**config)
