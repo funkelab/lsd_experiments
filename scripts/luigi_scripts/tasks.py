@@ -94,8 +94,8 @@ class ProcessTask(luigi.Task):
                 'sample': self.sample,
                 'out_dataset': 'volumes/' + self.predict_type,
                 'out_dims': 3 if self.predict_type == 'affs' else 10, # TODO: add long range affs
-                'block_size_in_chunks': [8, 8, 8], # == 512 chunks
-                'num_workers': 8, # TODO: maybe make parameter of this task
+                'block_size_in_chunks': [2, 7, 7], # == 512 chunks TODO: make parameter of this task
+                'num_workers': 1, # TODO: maybe make parameter of this task
                 'raw_dataset': 'volumes/raw' # TODO: for Dip, we'll need raw/s0
             }, f)
 
@@ -113,7 +113,7 @@ class ProcessTask(luigi.Task):
         return N5DatasetTarget(self.output_filename(), 'volumes/' + self.predict_type)
 
     def output_dir(self):
-        return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
+        return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
         return os.path.join(self.output_dir(), self.sample)
@@ -190,7 +190,7 @@ class ExtractFragments(luigi.Task):
         ]
 
     def output_dir(self):
-        return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
+        return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
         return os.path.join(self.output_dir(), self.sample)
@@ -266,7 +266,7 @@ class Agglomerate(luigi.Task):
         return MongoDbCollectionTarget(db_name, db_host, 'edges')
 
     def output_dir(self):
-        return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
+        return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
         return os.path.join(self.output_dir(), self.sample)
@@ -330,7 +330,7 @@ class Evaluate(luigi.Task):
                 ], stdout=o, stderr=e)
 
     def output_dir(self):
-        return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
+        return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
 
     def output(self):
 
