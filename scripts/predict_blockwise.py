@@ -99,7 +99,7 @@ def predict_blockwise(
     print("Following sizes in world units:")
     print("net input size  = %s"%(net_input_size,))
     print("net output size = %s"%(net_output_size,))
-    print("context         = %s"%(net_output_size,))
+    print("context         = %s"%(context,))
 
     # compute sizes of blocks
     block_output_size = chunk_size*tuple(block_size_in_chunks)
@@ -149,7 +149,8 @@ def predict_blockwise(
         check_function=lambda b: check_block(out_file, out_dataset, b),
         num_workers=num_workers,
         processes=False,
-        read_write_conflict=False)
+        read_write_conflict=False,
+        fit='overhang')
 
 def predict_in_block(
         experiment,
@@ -204,7 +205,7 @@ def predict_in_block(
         'run_lsf',
         '-c', '5',
         '-g', '1',
-        '-d', 'funkey/lsd:v0.3',
+        '-d', 'funkey/lsd:v0.4',
         'python -u %s %s'%(
             predict_script,
             config_file
@@ -224,7 +225,7 @@ def check_block(out_file, out_dataset, block):
     print("Checking if block %s is complete..."%block.write_roi)
 
     ds = daisy.open_ds(out_file, out_dataset)
-    center_values = ds[block.write_roi.get_center()]
+    center_values = ds[block.write_roi.get_begin()]
     s = np.sum(center_values)
     print("Sum of center values in %s is %f"%(block.write_roi, s))
 
