@@ -116,7 +116,7 @@ class ProcessTask(luigi.Task):
         return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
-        return os.path.join(self.output_dir(), '%s.n5'%self.sample)
+        return os.path.join(self.output_dir(), self.sample)
 
 class ExtractFragments(luigi.Task):
 
@@ -193,7 +193,7 @@ class ExtractFragments(luigi.Task):
         return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
-        return os.path.join(self.output_dir(), '%s.n5'%self.sample)
+        return os.path.join(self.output_dir(), self.sample)
 
 class Agglomerate(luigi.Task):
 
@@ -269,7 +269,7 @@ class Agglomerate(luigi.Task):
         return os.path.join(base_dir, '03_predict', self.setup, str(self.iteration))
 
     def output_filename(self):
-        return os.path.join(self.output_dir(), '%s.n5'%self.sample)
+        return os.path.join(self.output_dir(), self.sample)
 
 class Evaluate(luigi.Task):
 
