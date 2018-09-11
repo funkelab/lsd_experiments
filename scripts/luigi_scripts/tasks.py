@@ -22,8 +22,8 @@ def get_db_name(experiment, setup, iteration, sample):
     return '_'.join([
         experiment,
         setup.replace('setup', ''),
-        str(iteration/1000) + 'k',
-        sample.replace('testing/', '') # argh...
+        str(int(iteration/1000)) + 'k',
+        sample[:10].replace('testing/', '').replace('.', '_').replace(':', '_') # argh...
     ])
 
 class TrainTask(luigi.Task):
@@ -39,10 +39,10 @@ class TrainTask(luigi.Task):
 
     def run(self):
 
-        log_base = os.path.join(base_dir, self.experiment, '02_train', str(self.setup), 'train_%d'%self.iteration)
+        log_base = os.path.join(base_dir, self.experiment, '02_train', self.setup, 'train_%d'%self.iteration)
         log_out = log_base + '.out'
         log_err = log_base + '.err'
-        os.chdir(os.path.join(base_dir, '02_train', self.setup))
+        os.chdir(os.path.join(base_dir, self.experiment, '02_train', self.setup))
 
         with open(log_out, 'w') as o:
             with open(log_err, 'w') as e:
@@ -87,7 +87,7 @@ class ProcessTask(luigi.Task):
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
-            json.dump(f, {
+            json.dump({
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
@@ -97,7 +97,7 @@ class ProcessTask(luigi.Task):
                 'block_size_in_chunks': [8, 8, 8], # == 512 chunks
                 'num_workers': 8, # TODO: maybe make parameter of this task
                 'raw_dataset': 'volumes/raw' # TODO: for Dip, we'll need raw/s0
-            })
+            }, f)
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:
@@ -152,7 +152,7 @@ class ExtractFragments(luigi.Task):
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
-            json.dump(f, {
+            json.dump({
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
@@ -164,7 +164,7 @@ class ExtractFragments(luigi.Task):
                 'num_workers': 8,
                 'fragments_in_xy': self.fragments_in_xy,
                 'mask_fragments': self.mask_fragments
-            })
+            }, f)
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:
@@ -233,7 +233,7 @@ class Agglomerate(luigi.Task):
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
-            json.dump(f, {
+            json.dump({
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
@@ -243,7 +243,7 @@ class Agglomerate(luigi.Task):
                 'db_host': db_host,
                 'db_name': db_name,
                 'num_workers': 8
-            })
+            }, f)
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:
@@ -309,7 +309,7 @@ class Evaluate(luigi.Task):
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
-            json.dump(f, {
+            json.dump({
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
@@ -318,7 +318,7 @@ class Evaluate(luigi.Task):
                 'db_host': db_host,
                 'db_name': db_name,
                 'thresholds': self.thresholds
-            })
+            }, f)
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:

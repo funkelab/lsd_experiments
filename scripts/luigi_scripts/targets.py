@@ -82,4 +82,4 @@ class MongoDbCollectionTarget(luigi.Target):
         client = pymongo.MongoClient(self.db_host)
         db = client[self.db_name]
 
-        return self.collection in db
+        return self.collection in db.list_collections()
