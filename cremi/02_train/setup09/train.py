@@ -19,6 +19,8 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -118,10 +120,10 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
-            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            neighborhood,
             labels=labels,
             affinities=gt,
             labels_mask=labels_mask,
@@ -157,6 +159,8 @@ def train_until(max_iteration):
                 config['affs']: affs
             },
             gradients={},
+            summary=config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
