@@ -119,6 +119,7 @@ def predict_blockwise(
     print("Block write ROI  = %s"%block_write_roi)
     print("Total output ROI = %s"%output_roi)
 
+    logging.info('Preparing output dataset')
     print("Preparing output dataset...")
 
     ds = daisy.prepare_ds(
@@ -151,6 +152,8 @@ def predict_blockwise(
         processes=False,
         read_write_conflict=False,
         fit='overhang')
+
+    print('Successfully finished prediction')
 
 def predict_in_block(
         experiment,
@@ -205,7 +208,7 @@ def predict_in_block(
         'run_lsf',
         '-c', '5',
         '-g', '1',
-        '-d', 'funkey/lsd:v0.4',
+        '-d', 'sheridana/lsd:v0.4test',
         'python -u %s %s'%(
             predict_script,
             config_file
@@ -216,9 +219,9 @@ def predict_in_block(
     print("Finished block with config %s..."%config_file)
 
     # if things went well, remove temporary files
-    os.remove(config_file)
-    os.remove('%d.out'%config_hash)
-    os.remove('%d.err'%config_hash)
+    #os.remove(config_file)
+    #os.remove('%d.out'%config_hash)
+    #os.remove('%d.err'%config_hash)
 
 def check_block(out_file, out_dataset, block):
 
