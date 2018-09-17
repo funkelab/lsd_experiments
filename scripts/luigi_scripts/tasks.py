@@ -109,7 +109,10 @@ class ProcessTask(luigi.Task):
                     config_filename
                 ], stdout=o, stderr=e)
 
+        #print('FINISHED PREDICTION')
+
     def output(self):
+        print(self.output_filename())
         return N5DatasetTarget(self.output_filename(), 'volumes/' + self.predict_type)
 
     def output_dir(self):
@@ -126,6 +129,9 @@ class ExtractFragments(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
+    db_host = luigi.Parameter()
+    db_name = luigi.Parameter()
+    num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
 
@@ -159,22 +165,24 @@ class ExtractFragments(luigi.Task):
                 'sample': self.sample,
                 'block_size': self.block_size,
                 'context': self.context,
-                'db_host': db_host,
+                'db_host': self.db_host,
                 'db_name': db_name,
-                'num_workers': 8,
+                'num_workers': 40,
                 'fragments_in_xy': self.fragments_in_xy,
                 'mask_fragments': self.mask_fragments
             }, f)
+
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:
             with open(log_err, 'w') as e:
                 check_call([
-                    'python',
-                    '-u',
-                    'extract_fragments_blockwise.py',
-                    config_filename
-                ], stdout=o, stderr=e)
+                    'run_lsf',
+                    '-c', '2',
+                    '-g', '1',
+                    '-d', 'funkey/lsd:v0.3',
+                    'python -u extract_fragments_blockwise.py ' + config_filename
+                ], stdout=o, stderr=e)                )
 
     def output(self):
 
@@ -185,9 +193,9 @@ class ExtractFragments(luigi.Task):
             self.sample)
 
         return [
-            N5DatasetTarget(self.output_filename(), 'volumes/fragments'),
-            MongoDbCollectionTarget(db_name, db_host, 'nodes')
-        ]
+                N5DatasetTarget(self.output_filename(), 'volumes/fragments'),
+                MongoDbCollectionTarget(db_name, self.db_host, 'nodes')
+            ]
 
     def output_dir(self):
         return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
@@ -203,11 +211,20 @@ class Agglomerate(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
+    db_host = luigi.Parameter()
+    db_name = luigi.Parameter()
+    num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
     # TODO: add merge function
 
     def requires(self):
+
+        db_name = get_db_name(
+            self.experiment,
+            self.setup,
+            self.iteration,
+            self.sample)
 
         return ExtractFragments(
             self.experiment,
@@ -216,6 +233,9 @@ class Agglomerate(luigi.Task):
             self.sample,
             self.block_size,
             self.context,
+            self.db_host,
+            db_name,
+            self.num_workers,
             self.fragments_in_xy,
             self.mask_fragments)
 
@@ -240,19 +260,20 @@ class Agglomerate(luigi.Task):
                 'sample': self.sample,
                 'block_size': self.block_size,
                 'context': self.context,
-                'db_host': db_host,
+                'db_host': self.db_host,
                 'db_name': db_name,
-                'num_workers': 8
+                'num_workers': 40
             }, f)
 
         os.chdir(os.path.join(base_dir, 'scripts'))
         with open(log_out, 'w') as o:
             with open(log_err, 'w') as e:
                 check_call([
-                    'python',
-                    '-u',
-                    'agglomerate_blockwise.py',
-                    config_filename
+                    'run_lsf',
+                    '-c', '2',
+                    '-g', '1',
+                    '-d', 'funkey/lsd:v0.3'
+                    'python -u agglomerate_blockwise.py ' + config_filename
                 ], stdout=o, stderr=e)
 
     def output(self):
@@ -263,7 +284,7 @@ class Agglomerate(luigi.Task):
             self.iteration,
             self.sample)
 
-        return MongoDbCollectionTarget(db_name, db_host, 'edges')
+        return MongoDbCollectionTarget(db_name, self.db_host, 'edges')
 
     def output_dir(self):
         return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
@@ -279,12 +300,21 @@ class Evaluate(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
+    db_host = luigi.Parameter()
+    num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
     border_threshold = luigi.IntParameter()
     thresholds = luigi.Parameter()
 
     def requires(self):
+
+        db_name = get_db_name(
+            self.experiment,
+            self.setup,
+            self.iteration,
+            self.sample)
+
         return Agglomerate(
             self.experiment,
             self.setup,
@@ -292,6 +322,9 @@ class Evaluate(luigi.Task):
             self.sample,
             self.block_size,
             self.context,
+            self.db_host,
+            db_name,
+            self.num_workers,
             self.fragments_in_xy,
             self.mask_fragments)
 
@@ -315,7 +348,7 @@ class Evaluate(luigi.Task):
                 'iteration': self.iteration,
                 'sample': self.sample,
                 'border_threshold': self.border_threshold,
-                'db_host': db_host,
+                'db_host': self.db_host,
                 'db_name': db_name,
                 'thresholds': self.thresholds
             }, f)
@@ -325,7 +358,7 @@ class Evaluate(luigi.Task):
             with open(log_err, 'w') as e:
                 check_call([
                     'run_docker',
-                    '-d', 'funkey/lsd:v0.4',
+                    '-d', 'sheridana/lsd:v0.4test',
                     'python -u evaluate.py ' + config_filename
                 ], stdout=o, stderr=e)
 
@@ -340,7 +373,7 @@ class Evaluate(luigi.Task):
             self.iteration,
             self.sample)
 
-        return MongoDbCollectionTarget(db_name, db_host, 'scores') # TODO: store in global scores DB
+        return MongoDbCollectionTarget(db_name, self.db_host, 'scores') # TODO: store in global scores DB
 
 class EvaluateCombinations(luigi.task.WrapperTask):
 

@@ -23,7 +23,7 @@ class N5DatasetTarget(luigi.Target):
         if not os.path.isdir(self.filename):
             return False
         try:
-            with z5py.File(self.filename, 'r') as f:
+            with z5py.File(self.filename, use_zarr_format=False, mode='r') as f:
                 return self.dataset in f
         except:
             return False
