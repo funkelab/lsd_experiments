@@ -16,6 +16,8 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -35,6 +37,7 @@ def train_until(max_iteration):
     gt = ArrayKey('GT_AFFINITIES')
     gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
     with open('sd_net_config.json', 'r') as f:
         sd_config = json.load(f)
@@ -57,6 +60,7 @@ def train_until(max_iteration):
 
     snapshot_request = BatchRequest({
         affs: request[gt],
+        affs_gradient: request[gt]
     })
 
     data_sources = tuple(
@@ -120,10 +124,10 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
-            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            neighborhood,
             labels=labels,
             affinities=gt,
             labels_mask=labels_mask,
@@ -167,7 +171,11 @@ def train_until(max_iteration):
             outputs={
                 affs_config['affs']: affs
             },
-            gradients={},
+            gradients={
+                affs_config['affs']: affs_gradient
+            },
+            summary=affs_config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
@@ -176,6 +184,8 @@ def train_until(max_iteration):
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
+                labels_mask: 'volumes/labels/mask',
+                affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
                 labels: np.uint64

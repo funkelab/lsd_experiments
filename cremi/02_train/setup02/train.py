@@ -50,7 +50,7 @@ def train_until(max_iteration):
     request.add(gt_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt],
+        embedding: request[gt]
     })
 
     data_sources = tuple(
@@ -114,8 +114,8 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddLocalShapeDescriptor(
             labels,
             gt,
@@ -149,13 +149,15 @@ def train_until(max_iteration):
                 config['embedding']: embedding
             },
             gradients={},
+            summary=config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
+                gt: 'volumes/gt_embedding',
+                embedding: 'volumes/pred_embedding',
             },
             dataset_dtypes={
                 labels: np.uint64

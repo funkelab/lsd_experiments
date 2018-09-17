@@ -114,8 +114,8 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1,  only_xy=True) +
         AddLocalShapeDescriptor(
             labels,
             gt,
@@ -149,6 +149,8 @@ def train_until(max_iteration):
                 config['embedding']: embedding
             },
             gradients={},
+            summary=config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({

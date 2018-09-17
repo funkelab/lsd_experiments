@@ -44,6 +44,8 @@ def create_network(input_shape, name):
         embedding,
         embedding_loss_weights)
 
+    summary = tf.summary.scalar('setup06_eucl_loss', loss)
+
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
         beta1=0.95,
@@ -65,7 +67,8 @@ def create_network(input_shape, name):
         'loss': loss.name,
         'optimizer': optimizer.name,
         'input_shape': input_shape,
-        'output_shape': output_shape}
+        'output_shape': output_shape,
+        'summary': summary.name}
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
