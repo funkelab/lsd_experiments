@@ -59,6 +59,7 @@ def train_until(max_iteration):
     gt = ArrayKey('GT_AFFINITIES')
     gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
@@ -74,6 +75,7 @@ def train_until(max_iteration):
 
     snapshot_request = BatchRequest({
         affs: request[gt],
+        affs_gradient: request[gt]
     })
 
     data_sources = tuple(
@@ -137,8 +139,8 @@ def train_until(max_iteration):
             max_misalign=10,
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
             affinity_neighborhood,
             labels=labels,
@@ -175,15 +177,21 @@ def train_until(max_iteration):
             outputs={
                 config['affs']: affs
             },
-            gradients={},
+            gradients={
+                config['affs']: affs_gradient
+            },
+            summary=config['summary'],
+            log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_affinities',
-                affs: 'volumes/labels/pred_affinities',
-                gt_mask: 'volumes/labels/gt_mask'
+                gt: 'volumes/gt_affinities',
+                affs: 'volumes/pred_affinities',
+                gt_mask: 'volumes/labels/gt_mask',
+                labels_mask: 'volumes/labels/mask',
+                affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
                 labels: np.uint64

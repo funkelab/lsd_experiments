@@ -44,6 +44,8 @@ def create_network(input_shape, name):
         loss_weights_affs)
     loss = loss_embedding + loss_affs
 
+    summary = tf.summary.scalar('setup15_euc_loss', loss)
+
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
         beta1=0.95,
@@ -67,12 +69,13 @@ def create_network(input_shape, name):
         'loss': loss.name,
         'optimizer': optimizer.name,
         'input_shape': input_shape,
-        'output_shape': output_shape}
+        'output_shape': output_shape,
+        'summary': summary.name}
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((84, 268, 268), 'train_net')
-    # TODO: find largest test size
-    # create_network((84, 268, 268), 'test_net')
+    create_network((96, 484, 484), 'test_net')
+    
