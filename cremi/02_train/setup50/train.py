@@ -187,6 +187,7 @@ def train_until(max_iteration):
             subsample=8)
     train_pipeline += SimpleAugment(transpose_only=[1, 2])
     train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
+    train_pipeline += IntensityAugment(raw_cropped, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
     train_pipeline += GrowBoundary(labels, labels_mask, steps=1, only_xy=True)
 
     if phase == 'malis':
@@ -224,8 +225,20 @@ def train_until(max_iteration):
             artifacts_mask=artifacts_mask,
             contrast_scale=0.5,
             axis=0)
+    
+    train_pipeline += DefectAugment(
+            raw_cropped,
+            prob_missing=0.03,
+            prob_low_contrast=0.01,
+            prob_artifact=0.03,
+            artifact_source=artifact_source,
+            artifacts=artifacts,
+            artifacts_mask=artifacts_mask,
+            contrast_scale=0.5,
+            axis=0)
 
     train_pipeline += IntensityScaleShift(raw, 2,-1)
+    train_pipeline += IntensityScaleShift(raw_cropped, 2,-1)
     train_pipeline += PreCache(
             cache_size=40,
             num_workers=10)

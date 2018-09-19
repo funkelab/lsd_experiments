@@ -203,7 +203,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup06/train_net_checkpoint_400000',
+            checkpoint='../setup02/train_net_checkpoint_400000',
             graph='sd_net.meta',
             inputs={
                 sd_config['raw']: raw
