@@ -129,8 +129,6 @@ class ExtractFragments(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
-    db_host = luigi.Parameter()
-    db_name = luigi.Parameter()
     num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
@@ -165,7 +163,7 @@ class ExtractFragments(luigi.Task):
                 'sample': self.sample,
                 'block_size': self.block_size,
                 'context': self.context,
-                'db_host': self.db_host,
+                'db_host': db_host,
                 'db_name': db_name,
                 'num_workers': 40,
                 'fragments_in_xy': self.fragments_in_xy,
@@ -194,7 +192,7 @@ class ExtractFragments(luigi.Task):
 
         return [
                 N5DatasetTarget(self.output_filename(), 'volumes/fragments'),
-                MongoDbCollectionTarget(db_name, self.db_host, 'nodes')
+                MongoDbCollectionTarget(db_name, db_host, 'nodes')
             ]
 
     def output_dir(self):
@@ -211,20 +209,12 @@ class Agglomerate(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
-    db_host = luigi.Parameter()
-    db_name = luigi.Parameter()
     num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
     # TODO: add merge function
 
     def requires(self):
-
-        db_name = get_db_name(
-            self.experiment,
-            self.setup,
-            self.iteration,
-            self.sample)
 
         return ExtractFragments(
             self.experiment,
@@ -233,8 +223,6 @@ class Agglomerate(luigi.Task):
             self.sample,
             self.block_size,
             self.context,
-            self.db_host,
-            db_name,
             self.num_workers,
             self.fragments_in_xy,
             self.mask_fragments)
@@ -260,7 +248,7 @@ class Agglomerate(luigi.Task):
                 'sample': self.sample,
                 'block_size': self.block_size,
                 'context': self.context,
-                'db_host': self.db_host,
+                'db_host': db_host,
                 'db_name': db_name,
                 'num_workers': 40
             }, f)
@@ -284,7 +272,7 @@ class Agglomerate(luigi.Task):
             self.iteration,
             self.sample)
 
-        return MongoDbCollectionTarget(db_name, self.db_host, 'edges')
+        return MongoDbCollectionTarget(db_name, db_host, 'edges')
 
     def output_dir(self):
         return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))
@@ -300,7 +288,6 @@ class Evaluate(luigi.Task):
     sample = luigi.Parameter()
     block_size = luigi.Parameter()
     context = luigi.Parameter()
-    db_host = luigi.Parameter()
     num_workers = luigi.Parameter()
     fragments_in_xy = luigi.BoolParameter()
     mask_fragments = luigi.BoolParameter()
@@ -309,12 +296,6 @@ class Evaluate(luigi.Task):
 
     def requires(self):
 
-        db_name = get_db_name(
-            self.experiment,
-            self.setup,
-            self.iteration,
-            self.sample)
-
         return Agglomerate(
             self.experiment,
             self.setup,
@@ -322,8 +303,6 @@ class Evaluate(luigi.Task):
             self.sample,
             self.block_size,
             self.context,
-            self.db_host,
-            db_name,
             self.num_workers,
             self.fragments_in_xy,
             self.mask_fragments)
@@ -348,7 +327,7 @@ class Evaluate(luigi.Task):
                 'iteration': self.iteration,
                 'sample': self.sample,
                 'border_threshold': self.border_threshold,
-                'db_host': self.db_host,
+                'db_host': db_host,
                 'db_name': db_name,
                 'thresholds': self.thresholds
             }, f)
@@ -373,7 +352,7 @@ class Evaluate(luigi.Task):
             self.iteration,
             self.sample)
 
-        return MongoDbCollectionTarget(db_name, self.db_host, 'scores') # TODO: store in global scores DB
+        return MongoDbCollectionTarget(db_name, db_host, 'scores') # TODO: store in global scores DB
 
 class EvaluateCombinations(luigi.task.WrapperTask):
 
