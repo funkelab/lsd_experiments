@@ -177,10 +177,10 @@ class ExtractFragments(luigi.Task):
                 check_call([
                     'run_lsf',
                     '-c', '2',
-                    '-g', '1',
+                    '-g', '0',
                     '-d', 'funkey/lsd:v0.3',
                     'python -u extract_fragments_blockwise.py ' + config_filename
-                ], stdout=o, stderr=e)                )
+                ], stdout=o, stderr=e)
 
     def output(self):
 
@@ -259,8 +259,8 @@ class Agglomerate(luigi.Task):
                 check_call([
                     'run_lsf',
                     '-c', '2',
-                    '-g', '1',
-                    '-d', 'funkey/lsd:v0.3'
+                    '-g', '0',
+                    '-d', 'funkey/lsd:v0.3',
                     'python -u agglomerate_blockwise.py ' + config_filename
                 ], stdout=o, stderr=e)
 
@@ -272,7 +272,11 @@ class Agglomerate(luigi.Task):
             self.iteration,
             self.sample)
 
-        return MongoDbCollectionTarget(db_name, db_host, 'edges')
+        return MongoDbCollectionTarget(
+            db_name,
+            db_host,
+            'edges',
+            require_nonempty=True)
 
     def output_dir(self):
         return os.path.join(base_dir, self.experiment, '03_predict', self.setup, str(self.iteration))

@@ -20,12 +20,25 @@ class N5DatasetTarget(luigi.Target):
         self.dataset = dataset
 
     def exists(self):
+
+        print("Checking if %s exists..."%self.filename)
         if not os.path.isdir(self.filename):
+            print("%s does NOT exist"%self.filename)
             return False
         try:
+            print(
+                "Checking if dataset %s is in %s..."%(
+                    self.dataset,
+                    self.filename))
             with z5py.File(self.filename, use_zarr_format=False, mode='r') as f:
-                return self.dataset in f
-        except:
+                exists = self.dataset in f
+                if not exists:
+                    print("%s is NOT contained in %s"%(self.dataset, self.filename))
+                else:
+                    print("%s is contained in %s"%(self.dataset, self.filename))
+                return exists
+        except e:
+            print("exception when trying to access %s: %s"%(self.filename, e))
             return False
 
 class N5AttributeTarget(luigi.Target):
@@ -69,11 +82,12 @@ class JsonTarget(luigi.Target):
 
 class MongoDbCollectionTarget(luigi.Target):
 
-    def __init__(self, db_name, db_host, collection):
+    def __init__(self, db_name, db_host, collection, require_nonempty=False):
 
         self.db_name = db_name
         self.db_host = db_host
         self.collection = collection
+        self.require_nonempty = require_nonempty
 
     def exists(self):
 
@@ -82,4 +96,20 @@ class MongoDbCollectionTarget(luigi.Target):
         client = pymongo.MongoClient(self.db_host)
         db = client[self.db_name]
 
-        return self.collection in db.list_collections()
+        exists = self.collection in db.list_collection_names()
+        if not exists:
+            print("collection %s does NOT exist in %s"%(self.collection,
+                self.db_name))
+            return False
+
+        if self.require_nonempty:
+
+            empty = db[self.collection].count() == 0
+            if empty:
+                print("collection %s is EMPTY"%self.collection)
+
+            return not empty
+
+        else:
+
+            return exists
