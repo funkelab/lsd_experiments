@@ -206,7 +206,7 @@ def predict_in_block(
 
     daisy.call([
         'run_lsf',
-        '-c', '5',
+        '-c', '2',
         '-g', '1',
         '-d', 'sheridana/lsd:v0.4test',
         'python -u %s %s'%(
@@ -219,9 +219,9 @@ def predict_in_block(
     print("Finished block with config %s..."%config_file)
 
     # if things went well, remove temporary files
-    #os.remove(config_file)
-    #os.remove('%d.out'%config_hash)
-    #os.remove('%d.err'%config_hash)
+    os.remove(config_file)
+    os.remove('%d.out'%config_hash)
+    os.remove('%d.err'%config_hash)
 
 def check_block(out_file, out_dataset, block):
 

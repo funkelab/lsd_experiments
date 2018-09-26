@@ -20,3 +20,5 @@ notes
 !fib19/03_predict/setup04/*.json
 log/
 dask-worker-space
+03_predict/
+*mongodb*
