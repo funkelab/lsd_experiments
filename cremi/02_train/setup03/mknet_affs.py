@@ -54,11 +54,14 @@ def create_network(input_shape, name):
         'optimizer': optimizer.name,
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'summary': summary.name}
+        'summary': summary.name,
+        'lsd_setup': "setup02",
+        'lsd_iteration': 400000
+        }
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((84, 268, 268), 'train_net')
-    create_network((96, 484, 484), 'test_net')
+    create_network((84, 268, 268), 'test_net')
