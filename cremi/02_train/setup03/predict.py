@@ -13,7 +13,7 @@ setup_dir = os.path.dirname(os.path.realpath(__file__))
 
 print('setup directory:', setup_dir)
 
-with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
     aff_net_config = json.load(f)
 with open(os.path.join(setup_dir, 'lsd_net_config.json'), 'r') as f:
     lsd_net_config = json.load(f)
