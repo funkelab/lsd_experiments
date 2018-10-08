@@ -18,7 +18,7 @@ def predict_blockwise(
         out_dims,
         block_size_in_chunks,
         num_workers,
-        raw_dataset='volumes/raw'):
+        raw_dataset):
     '''Run prediction in parallel blocks. Within blocks, predict in chunks.
 
     Args:
@@ -63,7 +63,7 @@ def predict_blockwise(
             The path to the raw dataset in the sample file. Defaults to
             `volumes/raw`.
     '''
-
+    
     experiment_dir = '../' + experiment
     data_dir = os.path.join(experiment_dir, '01_data')
     train_dir = os.path.join(experiment_dir, '02_train')
@@ -73,9 +73,9 @@ def predict_blockwise(
         setup,
         str(iteration))
 
-    # get absolute paths
     setup = os.path.abspath(os.path.join(train_dir, setup))
     in_file = os.path.abspath(os.path.join(data_dir, sample))
+
     out_file = os.path.abspath(
         os.path.join(
             predict_dir,
@@ -88,9 +88,11 @@ def predict_blockwise(
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
-    # get chunk size and context
+    # load config
     with open(os.path.join(setup, 'test_net_config.json')) as f:
         net_config = json.load(f)
+    
+    # get chunk size and context
     net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
     net_output_size = daisy.Coordinate(net_config['output_shape'])*source.voxel_size
     chunk_size = net_output_size
@@ -208,7 +210,7 @@ def predict_in_block(
         'run_lsf',
         '-c', '2',
         '-g', '1',
-        '-d', 'sheridana/lsd:v0.4test',
+        '-d', 'funkey/lsd:v0.4',
         'python -u %s %s'%(
             predict_script,
             config_file
