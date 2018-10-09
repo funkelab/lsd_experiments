@@ -7,50 +7,79 @@ import os
 import sys
 import logging
 
-def predict(iteration, in_file, read_roi, out_file, write_roi):
+def predict(
+        iteration,
+        in_file,
+        raw_dataset,
+        read_roi,
+        out_file,
+        out_dataset,
+        write_roi):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+        aff_net_config = json.load(f)
+    with open(os.path.join(setup_dir, 'lsd_net_config.json'), 'r') as f:
+        lsd_net_config = json.load(f)
+    experiment_dir = os.path.join(setup_dir, '..', '..')
+    lsd_setup_dir = os.path.realpath(os.path.join(
+        experiment_dir,
+        '02_train',
+        aff_net_config['lsd_setup']))
 
-    # TODO: change to predict graph
-    with open(os.path.join(setup_dir, 'train_net_config.json'), 'r') as f:
-        config = json.load(f)
 
+    raw = ArrayKey('RAW') 
     lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     voxel_size = Coordinate((8, 8, 8))
-    input_size = Coordinate(config['input_shape'])*voxel_size
-    output_size = Coordinate(config['output_shape'])*voxel_size
+    input_size = Coordinate(lsd_net_config['input_shape'])*voxel_size
+    lsd_size = Coordinate(lsd_net_config['output_shape'])*voxel_size
+    assert lsd_size == input_size
+    output_size = Coordinate(aff_net_config['output_shape'])*voxel_size
     read_roi *= voxel_size
     write_roi *= voxel_size
 
     chunk_request = BatchRequest()
-    chunk_request.add(lsds, input_size)
+    chunk_request.add(raw, input_size)
+    chunk_request.add(lsds, lsd_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
         N5Source(
             in_file,
             datasets = {
-                lsds: 'volumes/lsds'
+                raw: raw_dataset
             },
         ) +
-        Pad(lsds, size=None) +
-        Crop(lsds, read_roi) +
+        Pad(raw, size=None) +
+        Crop(raw, read_roi) +
+        Normalize(raw) +
+        IntensityScaleShift(raw, 2,-1) +
+        Predict(
+            os.path.join(lsd_setup_dir,
+                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph=os.path.join(setup_dir, 'lsd_net.meta'),
+            inputs={
+                lsd_net_config['raw']: raw
+            },
+            outputs={
+                lsd_net_config['embedding']: lsds
+            }
+        ) +
         Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
             inputs={
-                config['embedding']: lsds
+                aff_net_config['embedding']: lsds
             },
             outputs={
-                config['affs']: affs
+                aff_net_config['affs']: affs
             },
-            # TODO: change to predict graph
-            graph=os.path.join(setup_dir, 'train_net.meta')
+            graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
         N5Write(
             dataset_names={
-                affs: 'volumes/affs_from_lsds',
+                affs: out_dataset,
             },
             output_filename=out_file
         ) +
