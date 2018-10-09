@@ -52,12 +52,16 @@ def create_network(input_shape, name):
         'loss': loss.name,
         'optimizer': optimizer.name,
         'input_shape': input_shape,
-        'output_shape': output_shape}
+        'output_shape': output_shape,
+        'lsd_setup': 'setup02',
+        'lsd_iteration': 200000
+        }
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
+    create_network((196, 196, 196), 'test_net')
     # TODO: find largest test size
     # create_network((196, 196, 196), 'test_net')
