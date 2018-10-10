@@ -9,11 +9,11 @@ def create_network(input_shape, name):
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
     affs_batched = mala.networks.conv_pass(
         unet,
-        kernel_size=1,
+        kernel_sizes=[1],
         num_fmaps=3,
         num_repetitions=1,
         activation='sigmoid',
