@@ -25,7 +25,7 @@ def relabel_in_block(block, segmentation_ds, fragments_map, ignore=[0]):
     volume[np.isin(volume, ignore, invert=True)] -= offset
     shifted_fragments = fragments - offset
 
-    components = [fragments_map[fragment] for fragment in fragments]
+    components = np.array([fragments_map[fragment] for fragment in fragments], dtype=fragments.dtype)
     logging.debug("Restricted fragments map to {0} elements".format(len(components)))
     volume = lsd.labels.replace_values(volume, shifted_fragments, components)
     logging.debug("Writing relabeled block to segmentation volume")
