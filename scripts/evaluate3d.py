@@ -104,16 +104,15 @@ def evaluate(
     if os.path.isdir(tmp_fname):
         shutil.rmtree(tmp_fname)
     shutil.copytree(gt.data.path, os.path.join(tmp_fname, tmp_gt_seg_name))
-    gt_segmentation_ds = daisy.open_ds(tmp_fname, tmp_gt_seg_name)
     
-    #relabel connected components
-    num_neurons = parallel_renumber(
-        gt_segmentation_ds,
-        common_roi,
-        voxel_size,
-        block_size,
-        num_workers,
-        retry)
+    relabel connected components
+     num_neurons = parallel_renumber(
+         gt_segmentation_ds,
+         common_roi,
+         voxel_size,
+         block_size,
+         num_workers,
+         retry)
 
     print('Relabeled GT connected components')
   
@@ -123,8 +122,8 @@ def evaluate(
         print("Creating segmentation for threshold %f..."%threshold)
         seg_components = rag.get_connected_components(threshold)
         seg_counts_shape = (len(seg_components)+1, 1)
-        gt_seg_counts_shape = (1, num_neurons+1)
-        contingencies_shape = (len(seg_components)+1, num_neurons+1)
+        gt_seg_counts_shape = (1, int(10e7))
+        contingencies_shape = (len(seg_components)+1, int(10e7))
         parallel_relabel(
                 seg_components,
                 fragments,
