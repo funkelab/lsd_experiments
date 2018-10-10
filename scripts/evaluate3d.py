@@ -88,15 +88,6 @@ def evaluate(
         shutil.rmtree(tmp_fname)
     shutil.copytree(gt.data.path, os.path.join(tmp_fname, tmp_gt_seg_name))
     
-    relabel connected components
-     num_neurons = parallel_renumber(
-         gt_segmentation_ds,
-         common_roi,
-         voxel_size,
-         block_size,
-         num_workers,
-         retry)
-
     print('Relabeled GT connected components')
   
     for threshold in thresholds:
