@@ -17,23 +17,6 @@ import waterz
 
 logging.basicConfig(level=logging.INFO)
 
-def prune_and_renum(seg,
-                    sizeThreshold=1):
-    # renumber the components in descending order by size
-    segId,segSizes = np.unique(seg, return_counts=True)
-    descOrder = np.argsort(segSizes)[::-1]
-    renum = np.zeros(int(segId.max()+1),dtype=np.uint64)
-    segId = segId[descOrder]
-    segSizes = segSizes[descOrder]
-    renum[segId] = np.arange(1,len(segId)+1, dtype=np.uint64)
-
-    if sizeThreshold>0:
-        renum[segId[segSizes<=sizeThreshold]] = 0
-        segSizes = segSizes[segSizes>sizeThreshold]
-
-    seg = renum[seg]
-    return (seg, segSizes)
-
 def evaluate(
         experiment,
         setup,
