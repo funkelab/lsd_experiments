@@ -26,7 +26,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        Hdf5Source(
+        N5Source(
             in_file,
             datasets = {
                 raw: 'volumes/raw'
