@@ -15,7 +15,6 @@ def create_network(input_shape, name):
         unet,
         kernel_sizes=[1],
         num_fmaps=3,
-        num_repetitions=1,
         activation='sigmoid',
         name='affs')
 
