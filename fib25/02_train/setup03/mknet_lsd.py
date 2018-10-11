@@ -39,4 +39,4 @@ def create_network(input_shape, output_shape, name, scope):
 
 if __name__ == "__main__":
 
-    create_network((304, 304, 304), (196, 196, 196), 'lsd_net')
+    create_network((304, 304, 304), (196, 196, 196), 'lsd_net', 'setup02')
