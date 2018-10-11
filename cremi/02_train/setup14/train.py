@@ -16,6 +16,17 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+setup_dir = os.path.dirname(os.path.realpath(__file__))
+
+with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
+    aff_net_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+lsd_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    aff_net_config['lsd_setup']))
+
 neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
 phase_switch = 10000
@@ -72,7 +83,7 @@ def train_until(max_iteration):
     gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    with open('sd_net_config.json', 'r') as f:
+    with open('lsd_net_config.json', 'r') as f:
         sd_config = json.load(f)
     
     voxel_size = Coordinate((40, 4, 4))
@@ -192,8 +203,10 @@ def train_until(max_iteration):
             num_workers=10)
 
     train_pipeline += Predict(
-            checkpoint='../setup02/train_net_checkpoint_400000',
-            graph='sd_net.meta',
+            checkpoint=os.path.join(
+                lsd_setup_dir,
+                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph='lsd_net.meta',
             inputs={
                 sd_config['raw']: raw
             },

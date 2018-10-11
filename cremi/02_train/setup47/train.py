@@ -20,6 +20,17 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90',
 ]
 
+setup_dir = os.path.dirname(os.path.realpath(__file__))
+
+with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
+    aff_net_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+lsd_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    aff_net_config['lsd_setup']))
+
 affinity_neighborhood = np.array([
     
     [-1, 0, 0],
@@ -51,7 +62,7 @@ def train_until(max_iteration):
     with open('train_net_config.json', 'r') as f:
         context_config = json.load(f)
         
-    with open('sd_net_config.json', 'r') as f:
+    with open('lsd_net_config.json', 'r') as f:
         sd_config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -203,8 +214,10 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup06/train_net_checkpoint_400000',
-            graph='sd_net.meta',
+            checkpoint=os.path.join(
+                lsd_setup_dir,
+                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph='lsd_net.meta',
             inputs={
                 sd_config['raw']: raw
             },

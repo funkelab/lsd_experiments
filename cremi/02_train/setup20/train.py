@@ -16,6 +16,46 @@ samples = [
     'sample_C_padded_20160501.aligned.filled.cropped.0:90'
 ]
 
+setup_dir = os.path.dirname(os.path.realpath(__file__))
+
+with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
+    aff_net_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+lsd_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    aff_net_config['lsd_setup']))
+
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+
+phase_switch = 10000
+
+with open('train_net_config.json', 'r') as f:
+    affs_config = json.load(f)
+
+def add_malis_loss(graph):
+    affs = graph.get_tensor_by_name(affs_config['affs'])
+    gt_affs = graph.get_tensor_by_name(affs_config['gt_affs'])
+    gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
+    gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
+
+    loss = malis.malis_loss_op(affs, 
+        gt_affs, 
+        gt_seg,
+        neighborhood,
+        gt_affs_mask)
+    malis_summary = tf.summary.scalar('setup14_malis_loss', loss)
+    opt = tf.train.AdamOptimizer(
+        learning_rate=0.5e-4,
+        beta1=0.95,
+        beta2=0.999,
+        epsilon=1e-8,
+        name='malis_optimizer')
+    optimizer = opt.minimize(loss)
+
+    return (loss, optimizer)
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -25,6 +65,12 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
+    if trained_until < phase_switch and max_iteration > phase_switch:
+        train_until(phase_switch)
+
+    phase = 'euclid' if max_iteration <= phase_switch else 'malis'
+    print("Training in phase %s until %i"%(phase, max_iteration))
+
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
@@ -33,14 +79,13 @@ def train_until(max_iteration):
     embedding = ArrayKey('EMBEDDING')
     affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
-    gt_mask = ArrayKey('GT_AFFINITIES_MASK')
-    gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
+    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    with open('sd_net_config.json', 'r') as f:
+    with open('lsd_net_config.json', 'r') as f:
         sd_config = json.load(f)
-    with open('train_net_config.json', 'r') as f:
-        affs_config = json.load(f)
-
+    
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(sd_config['input_shape'])*voxel_size
     embedding_size = Coordinate(affs_config['input_shape'])*voxel_size
@@ -52,11 +97,13 @@ def train_until(max_iteration):
     request.add(labels_mask, output_size)
     request.add(embedding, embedding_size)
     request.add(gt, output_size)
-    request.add(gt_mask, output_size)
-    request.add(gt_scale, output_size)
+    request.add(gt_affs_mask, output_size)
+    if phase is 'euclid':
+        request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
         affs: request[gt],
+        affs_gradient: request[gt]
     })
 
     data_sources = tuple(
@@ -107,32 +154,39 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2])
     )
 
-
-    train_pipeline = (
-        data_sources +
-        RandomProvider() +
-        ElasticAugment(
+    train_pipeline = data_sources
+    train_pipeline += RandomProvider()
+    train_pipeline += ElasticAugment(
             control_point_spacing=[4,40,40],
             jitter_sigma=[0,2,2],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0.05,
             prob_shift=0.05,
             max_misalign=10,
-            subsample=8) +
-        SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
-        GrowBoundary(labels, labels_mask, steps=1) +
-        AddAffinities(
-            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            subsample=8)
+    train_pipeline += SimpleAugment(transpose_only=[1, 2])
+    train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
+    train_pipeline += GrowBoundary(labels, labels_mask, steps=1, only_xy=True)
+
+    if phase == 'malis':
+        train_pipeline += RenumberConnectedComponents(
+            labels=labels
+            )
+
+    train_pipeline += AddAffinities(
+            neighborhood,
             labels=labels,
-            affinities=gt,
             labels_mask=labels_mask,
-            affinities_mask=gt_mask) +
-        BalanceLabels(
+            affinities=gt,
+            affinities_mask=gt_affs_mask)
+
+    if phase == 'euclid':
+        train_pipeline += BalanceLabels(
             gt,
-            gt_scale,
-            gt_mask) +
-        DefectAugment(
+            gt_affs_scale,
+            gt_affs_mask)
+
+    train_pipeline += DefectAugment(
             raw,
             prob_missing=0.03,
             prob_low_contrast=0.01,
@@ -141,50 +195,74 @@ def train_until(max_iteration):
             artifacts=artifacts,
             artifacts_mask=artifacts_mask,
             contrast_scale=0.5,
-            axis=0) +
-        IntensityScaleShift(raw, 2,-1) +
-        PreCache(
+            axis=0)
+
+    train_pipeline += IntensityScaleShift(raw, 2,-1)
+    train_pipeline += PreCache(
             cache_size=40,
-            num_workers=10) +
-        Predict(
-            checkpoint='../setup02/train_net_checkpoint_400000',
-            graph='sd_net.meta',
+            num_workers=10)
+
+    train_pipeline += Predict(
+            checkpoint=os.path.join(
+                lsd_setup_dir,
+                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph='lsd_net.meta',
             inputs={
                 sd_config['raw']: raw
             },
             outputs={
                 sd_config['embedding']: embedding
-            }) +
-        Train(
+            })
+
+    train_inputs = {
+        affs_config['embedding']: embedding,
+        affs_config['gt_affs']: gt,
+    }
+    if phase == 'euclid':
+        train_loss = affs_config['loss']
+        train_optimizer = affs_config['optimizer']
+        train_summary = affs_config['summary']
+        train_inputs[affs_config['affs_loss_weights']] = gt_affs_scale
+    else:
+        train_loss = None
+        train_optimizer = add_malis_loss
+        train_inputs['gt_seg:0'] = labels
+        train_inputs['gt_affs_mask:0'] = gt_affs_mask
+        train_summary = 'setup14_malis_loss:0'
+
+    train_pipeline += Train(
             'train_net',
-            optimizer=affs_config['optimizer'],
-            loss=affs_config['loss'],
-            inputs={
-                affs_config['embedding']: embedding,
-                affs_config['gt_affs']: gt,
-                affs_config['affs_loss_weights']: gt_scale,
-            },
+            optimizer=train_optimizer,
+            loss=train_loss,
+            inputs=train_inputs,
             outputs={
                 affs_config['affs']: affs
             },
-            gradients={},
-            save_every=10000) +
-        IntensityScaleShift(raw, 0.5, 0.5) +
-        Snapshot({
+            gradients={
+                affs_config['affs']: affs_gradient
+            },
+            summary=train_summary,
+            log_dir='log', 
+            save_every=10000)
+
+    train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
+    train_pipeline += Snapshot({
                 raw: 'volumes/raw',
                 embedding: 'volumes/embedding',
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
+                labels_mask: 'volumes/labels/mask',
+                affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
-            additional_request=snapshot_request) +
-        PrintProfilingStats(every=10)
-    )
+            additional_request=snapshot_request)
+
+    train_pipeline += PrintProfilingStats(every=10)
 
     print("Starting training...")
     with build(train_pipeline) as b:
