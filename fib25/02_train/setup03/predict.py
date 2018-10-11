@@ -35,7 +35,7 @@ def predict(
     voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(lsd_net_config['input_shape'])*voxel_size
     lsd_size = Coordinate(lsd_net_config['output_shape'])*voxel_size
-    assert lsd_size == input_size
+    assert lsd_size == Coordinate(aff_net_config['input_shape'])*voxel_size
     output_size = Coordinate(aff_net_config['output_shape'])*voxel_size
     read_roi *= voxel_size
     write_roi *= voxel_size
@@ -103,14 +103,21 @@ if __name__ == "__main__":
 
     read_roi = Roi(
         config['read_begin'],
-        config['read_shape'])
+        config['read_size'])
     write_roi = Roi(
         config['write_begin'],
-        config['write_shape'])
+        config['write_size'])
+    
+    if 'raw_dataset' in config:
+        raw_dataset = config['raw_dataset']
+    else:
+        raw_dataset = 'volumes/raw'
 
     predict(
         config['iteration'],
         config['in_file'],
+        raw_dataset,
         read_roi,
         config['out_file'],
+        config['out_dataset'],
         write_roi)
