@@ -14,7 +14,7 @@ def create_network(input_shape, output_shape, name, scope):
 
         unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-        embedding_batched = mala.networks.conv_pass(
+        embedding_batched, _ = mala.networks.conv_pass(
             unet,
             kernel_sizes=[1],
             num_fmaps=10,
