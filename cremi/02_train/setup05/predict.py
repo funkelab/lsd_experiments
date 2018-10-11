@@ -10,7 +10,7 @@ import z5py
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
     net_config = json.load(f)
 
 # voxels
@@ -62,7 +62,7 @@ def predict(
             outputs={
                 net_config['affs']: affs
             },
-            graph=os.path.join(setup_dir, 'test_net.meta')
+            graph=os.path.join(setup_dir, '.meta')
         ) +
         N5Write(
             dataset_names={
@@ -81,8 +81,6 @@ def predict(
 
 if __name__ == "__main__":
 
-    print("Starting prediction...")
-
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
     logging.getLogger('gunpowder.nodes.n5_write').setLevel(logging.DEBUG)
@@ -100,10 +98,7 @@ if __name__ == "__main__":
     print("Read ROI in nm is %s"%read_roi)
     print("Write ROI in nm is %s"%write_roi)
 
-    out_file = run_config['out_file']
-    out_dataset = run_config['out_dataset']
-
-    f = z5py.File(out_file, use_zarr_format=False, mode='w')
+    '''f = z5py.File(out_file, use_zarr_format=False, mode='w')
     if out_dataset not in f:
         ds = f.create_dataset(
             out_dataset,
@@ -112,17 +107,17 @@ if __name__ == "__main__":
             compression='gzip',
             dtype=np.float32)
         ds.attrs['resolution'] = voxel_size[::-1]
-        ds.attrs['offset'] = write_roi.get_begin()[::-1]
+        ds.attrs['offset'] = write_roi.get_begin()[::-1]'''
+
     if 'raw_dataset' in run_config:
         raw_dataset = run_config['raw_dataset']
     else:
         raw_dataset = 'volumes/raw'
-
 
     predict(
         run_config['iteration'],
         run_config['in_file'],
         raw_dataset,
         read_roi,
-        out_file,
-        out_dataset)
+        run_config['out_file'],
+        run_config['out_dataset'])

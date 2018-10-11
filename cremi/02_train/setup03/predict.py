@@ -106,13 +106,12 @@ def predict(
         Scan(chunk_request, num_workers=1)
         )
 
+    print("Starting prediction...")
     with build(pipeline):
         pipeline.request_batch(BatchRequest())
     print("Prediction finished")
 
 if __name__ == "__main__":
-
-    print("Starting prediction...")
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
@@ -131,13 +130,7 @@ if __name__ == "__main__":
     print("Read ROI in nm is %s"%read_roi)
     print("Write ROI in nm is %s"%write_roi)
 
-    in_file = run_config['in_file']
-    iteration = run_config['iteration']
-
-    out_file = run_config['out_file']
-    out_dataset = run_config['out_dataset']
-
-    '''f = z5py.File(out_file, use_zarr_format=False, mode='r+')
+    '''f = z5py.File(out_file, use_zarr_format=False, mode='w')
     if out_dataset not in f:
         ds = f.create_dataset(
             out_dataset,
@@ -154,9 +147,9 @@ if __name__ == "__main__":
         raw_dataset = 'volumes/raw'
 
     predict(
-        iteration,
-        in_file,
+        run_config['iteration'],
+        run_config['in_file'],
         raw_dataset,
         read_roi,
-        out_file,
-        out_dataset)
+        run_config['out_file'],
+        run_config['out_dataset'])

@@ -12,7 +12,7 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
     # TODO: change to predict graph
-    with open(os.path.join(setup_dir, 'train_net_config.json'), 'r') as f:
+    with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -48,7 +48,7 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
                 config['embedding']: embedding
             },
             # TODO: change to predict graph
-            graph=os.path.join(setup_dir, 'train_net.meta')
+            graph=os.path.join(setup_dir, 'config.meta')
         ) +
         N5Write(
             dataset_names={
@@ -74,18 +74,39 @@ if __name__ == "__main__":
 
     config_file = sys.argv[1]
     with open(config_file, 'r') as f:
-        config = json.load(f)
+        run_config = json.load(f)
 
     read_roi = Roi(
-        config['read_begin'],
-        config['read_shape'])
-    write_roi = Roi(
-        config['write_begin'],
-        config['write_shape'])
+        run_config['read_begin'],
+        run_config['read_size'])
+    write_roi = read_roi.grow(-context_nm, -context_nm)
+
+    print("Read ROI in nm is %s"%read_roi)
+    print("Write ROI in nm is %s"%write_roi)
+
+    out_file = run_config['out_file']
+    out_dataset = run_config['out_dataset']
+
+    '''f = z5py.File(out_file, use_zarr_format=False, mode='r+')
+    if out_dataset not in f:
+        ds = f.create_dataset(
+            out_dataset,
+            shape=(10,) + (write_roi//voxel_size).get_shape(),
+            chunks=(10,) + output_shape,
+            compression='gzip',
+            dtype=np.float32)
+        ds.attrs['resolution'] = voxel_size[::-1]
+        ds.attrs['offset'] = write_roi.get_begin()[::-1]'''
+
+    if 'raw_dataset' in run_config:
+        raw_dataset = run_config['raw_dataset']
+    else:
+        raw_dataset = 'volumes/raw'
 
     predict(
-        config['iteration'],
-        config['in_file'],
+        run_config['iteration'],
+        run_config['in_file'],
+        raw_dataset,
         read_roi,
-        config['out_file'],
-        write_roi)
+        run_config['out_file'],
+        run_config['out_dataset'])
