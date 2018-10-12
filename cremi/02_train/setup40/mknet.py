@@ -34,7 +34,7 @@ def create_lsd_network(input_shape, output_shape, name, scope):
             'embedding': embedding.name,
             'input_shape': input_shape,
             'output_shape': output_shape}
-        with open(name + '_config.json', 'w') as f:
+        with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
 def create_affs_network(input_shape, intermediate_shape, expected_output_shape, name):
@@ -69,7 +69,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
     affs = tf.squeeze(affs_batched, axis=0)
 
     output_shape = tuple(affs.get_shape().as_list()[1:])
-    assert expected_output_shape == output_shape
+    assert expected_output_shape == output_shape, "%s != %s"%(expected_output_shape, output_shape)
 
     gt_embedding = tf.placeholder(tf.float32, shape=(10,) + output_shape)
     gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
@@ -117,7 +117,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         'lsd_setup': "setup02",
         'lsd_iteration': 400000
         }
-    with open(name + '_config.json', 'w') as f:
+    with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 def create_config(input_shape, output_shape, num_dims, name):
