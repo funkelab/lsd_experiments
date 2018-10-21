@@ -145,8 +145,6 @@ def predict_blockwise(
         read_write_conflict=False,
         fit='overhang')
 
-    print('Successfully finished prediction')
-
 def predict_in_block(
         experiment,
         setup,
