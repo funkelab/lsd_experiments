@@ -13,12 +13,12 @@ def predict_blockwise(
         experiment,
         setup,
         iteration,
-        sample,
+        in_file,
+        in_dataset,
+        out_file,
         out_dataset,
-        out_dims,
         block_size_in_chunks,
-        num_workers,
-        raw_dataset):
+        num_workers):
     '''Run prediction in parallel blocks. Within blocks, predict in chunks.
 
     Args:
@@ -35,19 +35,15 @@ def predict_blockwise(
 
             Training iteration to predict from.
 
-        sample (``string``):
+        in_file (``string``):
+        in_dataset (``string``):
 
-            Name of the sample to predict in, relative to the experiment's data
-            dir. Should be an HDF5 or N5 container with 'volumes/raw'.
+            Path to the dataset to predict in.
 
+        out_file (``string``):
         out_dataset (``string``):
 
-            The name of the output dataset (e.g., 'volumes/affs').
-
-        out_dims (``int``):
-
-            The number of components per voxel to predict (e.g., 3 for
-            direct neighbor affinities).
+            Path to the output datset.
 
         block_size_in_chunks (``tuple`` of ``int``):
 
@@ -57,41 +53,35 @@ def predict_blockwise(
         num_workers (``int``):
 
             How many blocks to run in parallel.
-
-        raw_dataset (``string``, optional):
-
-            The path to the raw dataset in the sample file. Defaults to
-            `volumes/raw`.
     '''
-    
+
     experiment_dir = '../' + experiment
     data_dir = os.path.join(experiment_dir, '01_data')
     train_dir = os.path.join(experiment_dir, '02_train')
-    predict_dir = os.path.join(
-        experiment_dir,
-        '03_predict',
-        setup,
-        str(iteration))
+    network_dir = os.path.join(setup, str(iteration))
 
     setup = os.path.abspath(os.path.join(train_dir, setup))
-    in_file = os.path.abspath(os.path.join(data_dir, sample))
 
-    out_file = os.path.abspath(
-        os.path.join(
-            predict_dir,
-            sample.replace('hdf', 'n5').replace('json', 'n5')))
+    in_file = os.path.abspath(in_file)
+    out_file = os.path.abspath(out_file)
 
+    print('Input file path: ', in_file)
+    print('Output file path: ', out_file)
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source = daisy.open_ds(in_file, raw_dataset)
+    source = daisy.open_ds(in_file, in_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
     # load config
-    with open(os.path.join(setup, 'test_net_config.json')) as f:
+    with open(os.path.join(setup, 'config.json')) as f:
         net_config = json.load(f)
-    
+
+    out_dims = net_config['out_dims']
+    out_dtype = net_config['out_dtype']
+    print('Number of dimensions is %i'%out_dims)
+
     # get chunk size and context
     net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
     net_output_size = daisy.Coordinate(net_config['output_shape'])*source.voxel_size
@@ -129,7 +119,7 @@ def predict_blockwise(
         out_dataset,
         output_roi,
         source.voxel_size,
-        np.float32,
+        out_dtype,
         write_roi=daisy.Roi((0, 0, 0), chunk_size),
         num_channels=out_dims)
 
@@ -145,7 +135,7 @@ def predict_blockwise(
             setup,
             iteration,
             in_file,
-            raw_dataset,
+            in_dataset,
             out_file,
             out_dataset,
             b),
@@ -162,7 +152,7 @@ def predict_in_block(
         setup,
         iteration,
         in_file,
-        raw_dataset,
+        in_dataset,
         out_file,
         out_dataset,
         block):
@@ -185,7 +175,7 @@ def predict_in_block(
         'setup': setup,
         'iteration': iteration,
         'in_file': in_file,
-        'raw_dataset': raw_dataset,
+        'in_dataset': in_dataset,
         'read_begin': read_roi.get_begin(),
         'read_size': read_roi.get_shape(),
         'out_file': out_file,
@@ -210,7 +200,7 @@ def predict_in_block(
         'run_lsf',
         '-c', '2',
         '-g', '1',
-        '-d', 'funkey/lsd:v0.4',
+        '-d', 'funkey/lsd:v0.5',
         'python -u %s %s'%(
             predict_script,
             config_file
