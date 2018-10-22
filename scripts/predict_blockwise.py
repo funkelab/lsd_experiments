@@ -196,7 +196,7 @@ def predict_in_block(
 
     daisy.call([
         'run_lsf',
-        '-c', '2',
+        '-c', '5',
         '-g', '1',
         '-d', 'funkey/lsd:v0.5',
         'python -u %s %s'%(

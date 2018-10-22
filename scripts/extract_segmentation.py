@@ -9,25 +9,16 @@ logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.mongodb_rag_provider').setLevel(logging.DEBUG)
 
 def extract_segmentation(
-        experiment,
-        setup,
-        iteration,
-        sample,
+        fragments_file,
+        fragments_dataset,
+        out_file,
+        out_dataset,
         db_host,
         db_name,
         threshold):
 
-    experiment_dir = '../' + experiment
-    predict_dir = os.path.join(
-        experiment_dir,
-        '03_predict',
-        setup,
-        str(iteration))
-
-    filename = os.path.join(predict_dir, sample)
-
     # open fragments
-    fragments = daisy.open_ds(filename, 'volumes/fragments')
+    fragments = daisy.open_ds(fragments_file, fragments_dataset)
 
     # open RAG DB
     rag_provider = lsd.persistence.MongoDbRagProvider(
@@ -47,17 +38,22 @@ def extract_segmentation(
 
     # create a segmentation
     print("Merging...")
-    rag.get_segmentation(threshold, fragments.data)
+    segmentation_data = fragments.to_ndarray()
+    rag.get_segmentation(threshold, segmentation_data)
 
     # store segmentation
     print("Writing segmentation...")
     segmentation = daisy.prepare_ds(
-        filename,
-        'volumes/segmentation',
+        out_file,
+        out_dataset,
         fragments.roi,
         fragments.voxel_size,
-        fragments.data.dtype)
-    segmentation.data[:] = fragments.data
+        fragments.data.dtype,
+        # temporary fix until
+        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
+        # (we want gzip to be the default)
+        compressor={'id': 'zlib', 'level':5})
+    segmentation.data[:] = segmentation_data
 
 if __name__ == "__main__":
 

@@ -7,21 +7,24 @@ import daisy
 import sys
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def extract_fragments(
         experiment,
         setup,
         iteration,
-        sample,
+        affs_file,
+        affs_dataset,
         block_size,
         context,
         db_host,
         db_name,
         num_workers,
-        fragments_in_xy=False,
-        mask_fragments=False):
+        fragments_in_xy,
+        mask_fragments,
+        mask_file=None,
+        mask_dataset=None):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
 
@@ -39,10 +42,12 @@ def extract_fragments(
 
             Training iteration to predict from.
 
-        sample (``string``):
+        affs_file,
+        affs_dataset,
+        mask_file,
+        mask_dataset (``string``):
 
-            Name of the sample to predict in, relative to the experiment's data
-            dir. Should be an HDF5 or N5 container with 'volumes/raw'.
+            Where to find the affinities and mask (optional).
 
         block_size (``tuple`` of ``int``):
 
@@ -75,27 +80,13 @@ def extract_fragments(
             original sample dataset contains a dataset ``volumes/labels/mask``.
     '''
 
-    experiment_dir = '../' + experiment
-    predict_dir = os.path.join(
-        experiment_dir,
-        '03_predict',
-        setup,
-        str(iteration))
-
-    in_file = os.path.join(predict_dir, sample)
-    affs_ds = 'volumes/affs'
-    out_file = in_file
-    fragments_ds = 'volumes/fragments'
-
-    logging.info("Reading affs from %s", in_file)
-    affs = daisy.open_ds(in_file, affs_ds, mode='r')
+    logging.info("Reading affs from %s", affs_file)
+    affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
 
     if mask_fragments:
 
-        data_dir = os.path.join(experiment_dir, '01_data')
-        sample_file = os.path.abspath(os.path.join(data_dir, sample))
-        logging.info("Reading mask from %s", sample_file)
-        mask = daisy.open_ds(sample_file, 'volumes/labels/mask', mode='r')
+        logging.info("Reading mask from %s", mask_file)
+        mask = daisy.open_ds(mask_file, mask_dataset, mode='r')
 
     else:
 
@@ -103,12 +94,17 @@ def extract_fragments(
 
     # prepare fragments dataset
     fragments = daisy.prepare_ds(
-        out_file,
-        fragments_ds,
+        affs_file,
+        'volumes/fragments',
         affs.roi,
         affs.voxel_size,
         np.uint64,
-        daisy.Roi((0, 0, 0), block_size))
+        daisy.Roi((0, 0, 0), block_size),
+        # temporary fix until
+        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
+        # (we want gzip to be the default)
+        compressor={'id': 'zlib', 'level':5}
+        )
 
     # open RAG DB
     logging.info("Opening RAG DB...")

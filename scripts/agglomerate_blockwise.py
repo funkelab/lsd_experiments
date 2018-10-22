@@ -5,6 +5,7 @@ import numpy as np
 import os
 import daisy
 import sys
+#import config
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
@@ -14,12 +15,15 @@ def agglomerate(
         experiment,
         setup,
         iteration,
-        sample,
+        in_file,
+        affs_dataset,
+        fragments_dataset,
         block_size,
         context,
         db_host,
         db_name,
-        num_workers):
+        num_workers,
+        merge_function):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
 
@@ -37,10 +41,13 @@ def agglomerate(
 
             Training iteration to predict from.
 
-        sample (``string``):
+        in_file (``string``):
 
-            Name of the sample to predict in, relative to the experiment's data
-            dir. Should be an HDF5 or N5 container with 'volumes/raw'.
+            The input file containing affs and fragments.
+
+        affs_dataset, fragments_dataset (``string``):
+
+            Where to find the affinities and fragments.
 
         block_size (``tuple`` of ``int``):
 
@@ -71,16 +78,11 @@ def agglomerate(
         setup,
         str(iteration))
 
-    in_file = os.path.join(predict_dir, sample)
-    affs_ds = 'volumes/affs'
-    out_file = in_file
-    fragments_ds = 'volumes/fragments'
-
     logging.info("Reading affs from %s", in_file)
-    affs = daisy.open_ds(in_file, affs_ds, mode='r')
+    affs = daisy.open_ds(in_file, affs_dataset, mode='r')
 
     logging.info("Reading fragments from %s", in_file)
-    fragments = daisy.open_ds(in_file, fragments_ds, mode='r')
+    fragments = daisy.open_ds(in_file, fragments_dataset, mode='r')
 
     # open RAG DB
     logging.info("Opening RAG DB...")
@@ -91,13 +93,14 @@ def agglomerate(
     logging.info("RAG DB opened")
 
     # agglomerate in parallel
+
     lsd.parallel_aff_agglomerate(
         affs,
         fragments,
         rag_provider,
         block_size,
         context,
-        merge_function='OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256>>',
+        merge_function=merge_function,
         threshold=1.0,
         num_workers=num_workers)
 

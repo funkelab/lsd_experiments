@@ -16,7 +16,10 @@ def evaluate(
         experiment,
         setup,
         iteration,
-        sample,
+        gt_file,
+        gt_dataset,
+        fragments_file,
+        fragments_dataset,
         border_threshold,
         db_host,
         db_name,
@@ -29,10 +32,8 @@ def evaluate(
         setup,
         str(iteration))
 
-    predict_file = os.path.join(predict_dir, sample)
-
     # open fragments
-    fragments = daisy.open_ds(predict_file, 'volumes/fragments')
+    fragments = daisy.open_ds(fragments_file, fragments_dataset)
 
     # open RAG DB
     rag_provider = lsd.persistence.MongoDbRagProvider(
@@ -57,12 +58,7 @@ def evaluate(
     print("Number of edges in RAG: %d"%(len(rag.edges())))
 
     #read gt data
-    gt_file = os.path.join(
-        experiment_dir,
-        '01_data',
-        sample)
-
-    gt = daisy.open_ds(gt_file, 'volumes/labels/neuron_ids')
+    gt = daisy.open_ds(gt_file, gt_dataset)
 
     # evaluate only where we have both fragments and GT
     common_roi = fragments.roi.intersect(gt.roi)
@@ -71,6 +67,7 @@ def evaluate(
     print("Cropped fragments and GT to common ROI %s"%common_roi)
 
     #relabel connected components
+    gt.materialize()
     components = gt.data
     dtype = components.dtype
     simple_neighborhood = malis.mknhood3d()
@@ -117,9 +114,11 @@ def evaluate(
         gt.data.dtype)
     ground_truth.data[:] = gt.data'''
 
+    thresholds = list(np.arange(thresholds[0], thresholds[1], 0.1))
+
     for threshold in thresholds:
 
-        segmentation = fragments.data.copy()
+        segmentation = fragments.to_ndarray()
 
         # create a segmentation
         print("Creating segmentation for threshold %f..."%threshold)
@@ -139,9 +138,19 @@ def evaluate(
         print("Calculating VOI scores for threshold %f..."%threshold)
         metrics = waterz.evaluate(segmentation, gt.data)
 
+        voi_sum = np.array(metrics['voi_split'] + metrics['voi_merge'], dtype=np.float32)
+        a_rand = np.array(1.0 - (2.0*metrics['rand_split']*metrics['rand_merge'])/(metrics['rand_split']+metrics['rand_merge']), dtype=np.float32)
+        cremi_score = np.sqrt(np.array(voi_sum*a_rand).astype(float))
+
+        print('VOI sum:', voi_sum)
+        print('Adapted rand:', a_rand)
+        print('CREMI score:', cremi_score)
+
         #store values in db
         print("Storing VOI and RAND values for threshold %f in DB" %threshold)
         metrics.update({'threshold': threshold})
+        metrics.update({'db_name': db_name})
+        metrics.update({'cremi_score': cremi_score})
         score_collection.insert(metrics)
 
         print(metrics)
