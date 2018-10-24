@@ -8,6 +8,7 @@ import logging
 import shutil
 import numpy as np
 from scipy import sparse
+from sys import argv, exit
 import z5py
 
 logging.basicConfig(level=logging.DEBUG)
@@ -146,3 +147,98 @@ def parallel_score(
     voi_merge = H_contingencies - H_seg
     logging.info("VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
     return (voi_split, voi_merge)
+
+def main():
+    if len(argv) != 4+1:
+        print("usage: {0} <gt_fname> <gt_dsname> <seg_fname> <seg_ds>".format(argv[0]))
+        exit()
+
+    _, gt_fname, gt_dsname, seg_fname, seg_ds = argv
+
+    seg = daisy.open_ds(seg_fname, seg_ds)
+    gt_seg = daisy.open_ds(gt_fname, gt_dsname)
+    total_roi = gt_seg.roi
+    block_size = (1024, 1024, 1024)
+    read_roi = daisy.Roi((0,)*3, block_size)
+    write_roi = daisy.Roi((0,)*3, block_size)
+    chunk_size = 16384
+    num_workers = 12
+    retry = 2
+    seg_counts_shape = (int(10e7), 1)
+    gt_seg_counts_shape = (1, int(10e7))
+    contingencies_shape = (int(10e7), int(10e7))
+    m = mp.Manager()
+    blocked_contingencies = m.list()
+    blocked_seg_counts = m.list()
+    blocked_gt_seg_counts = m.list()
+    blocked_totals = m.list()
+
+    logging.info("Calculating contingencies")
+
+    for i in range(retry + 1):
+        if daisy.run_blockwise(
+            total_roi,
+            read_roi,
+            write_roi,
+            lambda b: contingencies_in_block(
+                b,
+                seg,
+                gt_seg,
+                blocked_contingencies,
+                blocked_seg_counts,
+                blocked_gt_seg_counts,
+                blocked_totals,
+                seg_counts_shape,
+                gt_seg_counts_shape,
+                contingencies_shape),
+            fit='shrink',
+            num_workers=num_workers,
+            processes=True,
+            read_write_conflict=False):
+                break
+
+        if i < retry:
+            logging.error("parallel relabel failed, retrying %d/%d", i + 1, retry)
+
+    logging.debug("Consolidating sparse information")
+
+    total = np.float64(np.sum(blocked_totals))
+    contingencies = sparse.csc_matrix(contingencies_shape, dtype=np.uint64)
+    seg_counts = sparse.csc_matrix(seg_counts_shape, dtype=np.uint64)
+    gt_seg_counts = sparse.csc_matrix(gt_seg_counts_shape, dtype=np.uint64)
+    for block in blocked_contingencies:
+        contingencies += block
+    for block in blocked_seg_counts:
+        seg_counts += block
+    for block in blocked_gt_seg_counts:
+        gt_seg_counts += block
+    
+    logging.info("Calculating entropies")
+
+    dask.config.set(scheduler='processes')
+    contingencies_chunks = create_chunk_slices(contingencies.nnz, chunk_size)
+    seg_counts_chunks = create_chunk_slices(seg_counts.nnz, chunk_size)
+    gt_seg_counts_chunks = create_chunk_slices(gt_seg_counts.nnz, chunk_size)
+
+    delayed_H_contingencies = [
+            dask.delayed(entropy_in_chunk)(
+                contingencies.data[c],
+                total) for c in contingencies_chunks]
+    delayed_H_seg = [
+            dask.delayed(entropy_in_chunk)(
+                seg_counts.data[c],
+                total) for c in seg_counts_chunks]
+    delayed_H_gt_seg = [
+            dask.delayed(entropy_in_chunk)(
+                gt_seg_counts.data[c],
+                total) for c in gt_seg_counts_chunks]
+
+    H_contingencies = dask.delayed(sum)(delayed_H_contingencies).compute(num_workers=num_workers)
+    H_seg = dask.delayed(sum)(delayed_H_seg).compute(num_workers=num_workers)
+    H_gt_seg = dask.delayed(sum)(delayed_H_gt_seg).compute(num_workers=num_workers)
+    voi_split = H_contingencies - H_gt_seg
+    voi_merge = H_contingencies - H_seg
+    logging.info("VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
+
+if __name__ == '__main__':
+    main()
