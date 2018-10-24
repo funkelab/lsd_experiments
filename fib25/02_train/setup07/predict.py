@@ -11,7 +11,8 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+    # TODO: change to predict graph
+    with open(os.path.join(setup_dir, 'train_net_config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -46,7 +47,8 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
             outputs={
                 config['embedding']: embedding
             },
-            graph=os.path.join(setup_dir, 'test_net.meta')
+            # TODO: change to predict graph
+            graph=os.path.join(setup_dir, 'train_net.meta')
         ) +
         N5Write(
             dataset_names={

@@ -35,7 +35,7 @@ def predict(
     voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(lsd_net_config['input_shape'])*voxel_size
     lsd_size = Coordinate(lsd_net_config['output_shape'])*voxel_size
-    assert lsd_size == Coordinate(aff_net_config['input_shape'])*voxel_size
+    assert lsd_size == input_size
     output_size = Coordinate(aff_net_config['output_shape'])*voxel_size
     read_roi *= voxel_size
     write_roi *= voxel_size
@@ -74,7 +74,8 @@ def predict(
             },
             outputs={
                 aff_net_config['affs']: affs
-            }
+            },
+            graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
         N5Write(
             dataset_names={
@@ -102,21 +103,14 @@ if __name__ == "__main__":
 
     read_roi = Roi(
         config['read_begin'],
-        config['read_size'])
+        config['read_shape'])
     write_roi = Roi(
         config['write_begin'],
-        config['write_size'])
-    
-    if 'raw_dataset' in config:
-        raw_dataset = config['raw_dataset']
-    else:
-        raw_dataset = 'volumes/raw'
+        config['write_shape'])
 
     predict(
         config['iteration'],
         config['in_file'],
-        raw_dataset,
         read_roi,
         config['out_file'],
-        config['out_dataset'],
         write_roi)

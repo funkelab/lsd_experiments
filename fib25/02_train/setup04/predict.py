@@ -7,49 +7,32 @@ import os
 import sys
 import logging
 
-def predict(
-        iteration,
-        in_file,
-        raw_dataset,
-        read_roi,
-        out_file,
-        out_dataset,
-        write_roi):
+def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
+
     with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
-        aff_net_config = json.load(f)
-    with open(os.path.join(setup_dir, 'lsd_net_config.json'), 'r') as f:
-        lsd_net_config = json.load(f)
-    experiment_dir = os.path.join(setup_dir, '..', '..')
-    lsd_setup_dir = os.path.realpath(os.path.join(
-        experiment_dir,
-        '02_train',
-        aff_net_config['lsd_setup']))
+        config = json.load(f)
 
-
-    raw = ArrayKey('RAW') 
-    lsds = ArrayKey('LSDS')
+    raw = ArrayKey('RAW')
     affs = ArrayKey('AFFS')
 
     voxel_size = Coordinate((8, 8, 8))
-    input_size = Coordinate(lsd_net_config['input_shape'])*voxel_size
-    lsd_size = Coordinate(lsd_net_config['output_shape'])*voxel_size
-    assert lsd_size == Coordinate(aff_net_config['input_shape'])*voxel_size
-    output_size = Coordinate(aff_net_config['output_shape'])*voxel_size
-    read_roi *= voxel_size
-    write_roi *= voxel_size
+    input_size = Coordinate(config['input_shape'])*voxel_size
+    output_size = Coordinate(config['output_shape'])*voxel_size
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
-    chunk_request.add(lsds, lsd_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
         N5Source(
             in_file,
             datasets = {
-                raw: raw_dataset
+                raw: 'volumes/raw'
+            },
+            array_specs = {
+                raw: ArraySpec(voxel_size=voxel_size)
             },
         ) +
         Pad(raw, size=None) +
@@ -57,24 +40,14 @@ def predict(
         Normalize(raw) +
         IntensityScaleShift(raw, 2,-1) +
         Predict(
-            os.path.join(lsd_setup_dir,
-                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
-            graph=os.path.join(setup_dir, 'lsd_net.meta'),
-            inputs={
-                lsd_net_config['raw']: raw
-            },
-            outputs={
-                lsd_net_config['embedding']: lsds
-            }
-        ) +
-        Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
             inputs={
-                aff_net_config['embedding']: lsds
+                config['raw']: raw
             },
             outputs={
-                aff_net_config['affs']: affs
-            }
+                config['affs']: affs
+            },
+            graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
         N5Write(
             dataset_names={
@@ -83,7 +56,7 @@ def predict(
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
+        Scan(chunk_request, num_workers=1)
     )
 
     print("Starting prediction...")
@@ -93,8 +66,12 @@ def predict(
 
 if __name__ == "__main__":
 
-    logging.basicConfig(level=logging.INFO)
+    print("Starting prediction...")
+
+    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
+    logging.getLogger('gunpowder.nodes.n5_write').setLevel(logging.DEBUG)
+    logging.getLogger('gunpowder.nodes.n5_source').setLevel(logging.DEBUG)
 
     config_file = sys.argv[1]
     with open(config_file, 'r') as f:
@@ -106,16 +83,10 @@ if __name__ == "__main__":
     write_roi = Roi(
         config['write_begin'],
         config['write_size'])
-    
-    if 'raw_dataset' in config:
-        raw_dataset = config['raw_dataset']
-    else:
-        raw_dataset = 'volumes/raw'
 
     predict(
         config['iteration'],
         config['in_file'],
-        raw_dataset,
         read_roi,
         config['out_file'],
         config['out_dataset'],

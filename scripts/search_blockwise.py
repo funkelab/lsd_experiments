@@ -88,7 +88,7 @@ def search(
 
 def nonzero_in_block(vol, epsilon, block, results):
     """Stores block ROI string to results if block is <= epsilon percent zero."""
-    vol_data = np.uint64(vol.intersect(block.read_roi).data)
+    vol_data = np.uint64(vol.[block.read_roi].to_ndarray())
     logging.debug("Searching in block {0}".format(block.read_roi))
     # determine proportion of zero values in block
     num_nonzero = np.float64(np.count_nonzero(vol_data))

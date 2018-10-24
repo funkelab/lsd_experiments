@@ -35,13 +35,13 @@ def train_until(max_iteration):
     gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
-    with open('lsd_net_config.json', 'r') as f:
-        lsd_config = json.load(f)
+    with open('sd_net_config.json', 'r') as f:
+        sd_config = json.load(f)
     with open('train_net_config.json', 'r') as f:
         affs_config = json.load(f)
 
     voxel_size = Coordinate((8,8,8))
-    input_size = Coordinate(lsd_config['input_shape'])*voxel_size
+    input_size = Coordinate(sd_config['input_shape'])*voxel_size
     embedding_size = Coordinate(affs_config['input_shape'])*voxel_size
     output_size = Coordinate(affs_config['output_shape'])*voxel_size
 
@@ -104,13 +104,13 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup02/train_net_checkpoint_200000',
-            graph='lsd_net.meta',
+            checkpoint='../setup02/train_net_checkpoint_150000',
+            graph='sd_net.meta',
             inputs={
-                lsd_config['raw']: raw
+                sd_config['raw']: raw
             },
             outputs={
-                lsd_config['embedding']: embedding
+                sd_config['embedding']: embedding
             }) +
         Train(
             'train_net',
@@ -137,7 +137,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=10000,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

@@ -33,8 +33,8 @@ def train_until(max_iteration):
     with open('lsd_context_net_config.json', 'r') as f:
         context_config = json.load(f)
         
-    with open('lsd_net_config.json', 'r') as f:
-        lsd_config = json.load(f)
+    with open('sd_net_config.json', 'r') as f:
+        sd_config = json.load(f)
 
     raw = ArrayKey('RAW')
     raw_cropped = ArrayKey('RAW_CROPPED')
@@ -50,7 +50,7 @@ def train_until(max_iteration):
     gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
     voxel_size = Coordinate((8,8,8))
-    sd_input_size = Coordinate(lsd_config['input_shape'])*voxel_size
+    sd_input_size = Coordinate(sd_config['input_shape'])*voxel_size
     context_input_size = Coordinate(context_config['input_shape'])*voxel_size
     pretrained_lsd_size = Coordinate(context_config['input_shape'])*voxel_size
     output_size = Coordinate(context_config['output_shape'])*voxel_size
@@ -128,13 +128,13 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup02/train_net_checkpoint_200000',
+            checkpoint='/groups/funke/home/funkej/workspace/projects/lsd/run/fib19/02_train/setup02/train_net_checkpoint_150000',
             graph='sd_net.meta',
             inputs={
-                lsd_config['raw']: raw
+                sd_config['raw']: raw
             },
             outputs={
-                lsd_config['embedding']: pretrained_lsd
+                sd_config['embedding']: pretrained_lsd
             }) +
         Train(
             'lsd_context_net',
@@ -167,7 +167,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=10000,
+            every=100,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

@@ -6,14 +6,14 @@ def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    raw = tf.placeholder(tf.float32, shape=input_shape)
-    raw_batched = tf.reshape(raw, (1, 1) + input_shape)
+    embedding = tf.placeholder(tf.float32, shape=(10,) + input_shape)
+    embedding_batched = tf.reshape(embedding, (1, 10) + input_shape)
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet = mala.networks.unet(embedding_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
     affs_batched = mala.networks.conv_pass(
         unet,
-        kernel_sizes=[1],
+        kernel_size=1,
         num_fmaps=3,
         num_repetitions=1,
         activation='sigmoid',
@@ -45,7 +45,7 @@ def create_network(input_shape, name):
     tf.train.export_meta_graph(filename=name + '.meta')
 
     config = {
-        'raw': raw.name,
+        'embedding': embedding.name,
         'affs': affs.name,
         'gt_affs': gt_affs.name,
         'affs_loss_weights': affs_loss_weights.name,
@@ -59,4 +59,5 @@ def create_network(input_shape, name):
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((352, 352, 352), 'test_net')
+    # TODO: find largest test size
+    # create_network((196, 196, 196), 'test_net')

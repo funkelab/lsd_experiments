@@ -72,6 +72,8 @@ def scan(
                 vol,
                 b,
                 out_file),
+            fit='shrink',
+            processes=True,
             num_workers=num_workers,
             read_write_conflict=False):
                 break
@@ -85,7 +87,7 @@ def nonzero_in_block(vol, block, out_file):
     Stores block ROI string and proportion nonzero elements in block to
     results.
     """
-    vol_data = np.uint64(vol.intersect(block.read_roi).data)
+    vol_data = np.uint64(vol[block.read_roi].to_ndarray())
     logging.debug("Scanning in block {0}".format(block.read_roi))
     # determine proportion of zero values in block
     num_nonzero = np.float64(np.count_nonzero(vol_data))
