@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 def relabel_in_block(block, segmentation_ds, fragments_map, ignore=[0]):
     logging.debug("Relabeling in {0}".format(block.read_roi))
-    volume = segmentation_ds[block.read_roi].data
+    volume = segmentation_ds[block.read_roi].to_ndarray()
     fragments = np.unique(volume)
     fragments = fragments[np.isin(fragments, ignore, invert=True)]
 
