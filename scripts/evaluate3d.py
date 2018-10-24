@@ -43,7 +43,7 @@ def evaluate(
     # open fragments
     fragments = daisy.open_ds(predict_file, 'volumes/fragments')
     
-    #open score DB
+    # open score DB
 
     client = MongoClient(db_host)
     database = client[db_name]
@@ -108,10 +108,7 @@ def evaluate(
                 num_workers=num_workers,
                 retry=retry)
 
-        #get VOI and RAND
-        # segmentation = daisy.open_ds(tmp_fname, tmp_dsname)[fragments.roi].data
-        # print("Calculating VOI scores for threshold %f..."%threshold)
-        # metrics = waterz.evaluate(segmentation, gt.data)
+        # get VOI and RAND
         print("Calculating VOI scores for threshold {0}...".format(threshold))
         (voi_split, voi_merge) = parallel_score(
                 tmp_fname,
@@ -126,14 +123,12 @@ def evaluate(
                 num_workers=8,
                 retry=retry)
 
-        # #store values in db
-        # print("Storing VOI and RAND values for threshold %f in DB" %threshold)
-        # metrics.update({'threshold': threshold})
-        # score_collection.insert(metrics)
-        print((threshold, voi_split, voi_merge))
-
-        # print(metrics)
-
+        # store values in db
+        print("Storing VOI values for threshold %f in DB" %threshold)
+        metrics = {'voi_split': voi_split, 'voi_merge': voi_merge, 'threshold': threshold}
+        score_collection.insert(metrics)
+        logging.info("Threshold: {0} VOI split: {1} VOI merge: {2}".format(
+            threshold, voi_split, voi_merge))
 
 if __name__ == "__main__":
 
