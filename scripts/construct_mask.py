@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 def construct_mask_in_block(block, vol, mask, context):
     logging.debug("Masking in {0}".format(block.read_roi))
     shape = np.array((block.read_roi / vol.voxel_size).get_shape())
-    data = vol[block.read_roi].data
+    data = vol[block.read_roi].to_ndarray()
     mask_in_block = np.ones(shape, dtype=np.uint16)
     mask_in_block[data == 0] = 0
     if not np.all(mask_in_block == 1) and np.count_nonzero(mask_in_block) > 0:
