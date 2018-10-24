@@ -2,14 +2,12 @@ import dask
 import dask.multiprocessing
 import multiprocessing as mp
 import daisy
-import lsd
 import os
 import logging
 import shutil
 import numpy as np
 from scipy import sparse
 from sys import argv, exit
-import z5py
 
 logging.basicConfig(level=logging.DEBUG)
 
