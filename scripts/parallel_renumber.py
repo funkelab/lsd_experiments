@@ -13,7 +13,7 @@ import z5py
 logging.basicConfig(level=logging.DEBUG)
 
 def unique_in_block(block, segmentation_ds, id_registry, ignore=[0]):
-    volume = segmentation_ds[block.read_roi].data
+    volume = segmentation_ds[block.read_roi].to_ndarray()
     unique = np.unique(volume)
     unique = unique[np.isin(unique, ignore, invert=True)]
     dict_entries = np.vstack((unique, np.ones(unique.shape)))
@@ -22,7 +22,7 @@ def unique_in_block(block, segmentation_ds, id_registry, ignore=[0]):
 
 def renumber_in_block(block, segmentation_ds, id_map, ignore=[0]):
     logging.debug("Renumbering in {0}".format(block.read_roi))
-    volume = segmentation_ds[block.read_roi].data
+    volume = segmentation_ds[block.read_roi].to_ndarray()
     old_ids = np.unique(volume)
     old_ids = old_ids[np.isin(old_ids, ignore, invert=True)]
 
