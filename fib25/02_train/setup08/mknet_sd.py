@@ -3,19 +3,20 @@ from mala.networks.unet import crop_zyx
 import tensorflow as tf
 import json
 
-def create_network(input_shape, output_shape, name, scope):
+def create_network(input_shape, output_shape, name):
 
     tf.reset_default_graph()
 
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-    embedding_batched, _ = mala.networks.conv_pass(
+    embedding_batched = mala.networks.conv_pass(
         unet,
-        kernel_sizes=[1],
+        kernel_size=1,
         num_fmaps=10,
+        num_repetitions=1,
         activation='sigmoid')
 
     embedding_batched = crop_zyx(embedding_batched, (1, 10) + output_shape)
@@ -37,4 +38,4 @@ def create_network(input_shape, output_shape, name, scope):
 
 if __name__ == "__main__":
 
-    create_network((304, 304, 304), (200, 200, 200), 'lsd_net', 'setup02')
+    create_network((304, 304, 304), (196, 196, 196), 'sd_net')

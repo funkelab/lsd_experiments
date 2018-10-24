@@ -74,8 +74,7 @@ def predict(
             },
             outputs={
                 aff_net_config['affs']: affs
-            },
-            graph=os.path.join(setup_dir, 'test_net.meta')
+            }
         ) +
         N5Write(
             dataset_names={

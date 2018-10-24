@@ -9,12 +9,13 @@ def create_network(input_shape, name):
     embedding = tf.placeholder(tf.float32, shape=(10,) + input_shape)
     embedding_batched = tf.reshape(embedding, (1, 10) + input_shape)
 
-    unet, _, _ = mala.networks.unet(embedding_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet = mala.networks.unet(embedding_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-    affs_batched, _ = mala.networks.conv_pass(
+    affs_batched = mala.networks.conv_pass(
         unet,
-        kernel_sizes=[1],
+        kernel_size=1,
         num_fmaps=3,
+        num_repetitions=1,
         activation='sigmoid',
         name='affs')
 
@@ -51,16 +52,12 @@ def create_network(input_shape, name):
         'loss': loss.name,
         'optimizer': optimizer.name,
         'input_shape': input_shape,
-        'output_shape': output_shape,
-        'lsd_setup': 'setup02',
-        'lsd_iteration': 200000
-        }
+        'output_shape': output_shape}
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
-    create_network((200, 200, 200), 'train_net')
-    create_network((200, 200, 200), 'test_net')
+    create_network((196, 196, 196), 'train_net')
     # TODO: find largest test size
     # create_network((196, 196, 196), 'test_net')

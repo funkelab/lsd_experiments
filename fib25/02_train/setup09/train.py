@@ -1,6 +1,5 @@
 from __future__ import print_function
 import sys
-import logging
 from gunpowder import *
 from gunpowder.tensorflow import *
 from mala.gunpowder import AddLocalShapeDescriptor
@@ -10,8 +9,6 @@ import math
 import json
 import tensorflow as tf
 import numpy as np
-
-logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/training'
 samples = [
@@ -37,8 +34,12 @@ def train_until(max_iteration):
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     embedding = ArrayKey('PREDICTED_EMBEDDING')
-    gt = ArrayKey('GT_AFFINITIES')
-    gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    affs = ArrayKey('PREDICTED_AFFS')
+    gt_embedding = ArrayKey('GT_EMBEDDING')
+    gt_embedding_scale = ArrayKey('GT_EMBEDDING_SCALE')
+    gt_affs = ArrayKey('GT_AFFINITIES')
+    gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
+    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
     voxel_size = Coordinate((8,8,8))
     input_size = Coordinate(config['input_shape'])*voxel_size
@@ -48,11 +49,15 @@ def train_until(max_iteration):
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(gt, output_size)
-    request.add(gt_scale, output_size)
+    request.add(gt_embedding, output_size)
+    request.add(gt_embedding_scale, output_size)
+    request.add(gt_affs, output_size)
+    request.add(gt_affs_mask, output_size)
+    request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt],
+        embedding: request[gt_embedding],
+        affs: request[gt_affs],
     })
 
     data_sources = tuple(
@@ -88,10 +93,20 @@ def train_until(max_iteration):
         GrowBoundary(labels, labels_mask, steps=1) +
         AddLocalShapeDescriptor(
             labels,
-            gt,
-            mask=gt_scale,
+            gt_embedding,
+            mask=gt_embedding_scale,
             sigma=80,
             downsample=2) +
+        AddAffinities(
+            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            labels=labels,
+            affinities=gt_affs,
+            labels_mask=labels_mask,
+            affinities_mask=gt_affs_mask) +
+        BalanceLabels(
+            gt_affs,
+            gt_affs_scale,
+            gt_affs_mask) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
@@ -102,25 +117,30 @@ def train_until(max_iteration):
             loss=config['loss'],
             inputs={
                 config['raw']: raw,
-                config['gt_embedding']: gt,
-                config['embedding_loss_weights']: gt_scale,
+                config['gt_embedding']: gt_embedding,
+                config['loss_weights_embedding']: gt_embedding_scale,
+                config['gt_affs']: gt_affs,
+                config['loss_weights_affs']: gt_affs_scale,
             },
             outputs={
-                config['embedding']: embedding
+                config['embedding']: embedding,
+                config['affs']: affs
             },
             gradients={},
-            save_every=100000) +
+            save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_embedding',
+                gt_embedding: 'volumes/labels/gt_embedding',
                 embedding: 'volumes/labels/pred_embedding',
+                gt_affs: 'volumes/labels/gt_affinities',
+                affs: 'volumes/labels/pred_affinities',
             },
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100000,
+            every=10000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -133,6 +153,6 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    # set_verbose(False)
+    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)

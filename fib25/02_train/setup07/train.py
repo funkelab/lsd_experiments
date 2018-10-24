@@ -109,7 +109,7 @@ def train_until(max_iteration):
                 config['embedding']: embedding
             },
             gradients={},
-            save_every=100000) +
+            save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
@@ -120,7 +120,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=100000,
+            every=10000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)

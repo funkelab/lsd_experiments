@@ -2,19 +2,24 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, num_features, name):
 
     tf.reset_default_graph()
 
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    pretrained_lsd = tf.placeholder(tf.float32, shape=(num_features,) + input_shape)
+    pretrained_lsd_batched = tf.reshape(pretrained_lsd, (1, num_features) + input_shape)
+
+    concat_input = tf.concat([raw_batched, pretrained_lsd_batched], axis=1)
+
+    unet = mala.networks.unet(concat_input, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
     embedding_batched = mala.networks.conv_pass(
         unet,
         kernel_size=1,
-        num_fmaps=10,
+        num_fmaps=num_features,
         num_repetitions=1,
         activation='sigmoid',
         name='embedding')
@@ -60,6 +65,7 @@ def create_network(input_shape, name):
 
     config = {
         'raw': raw.name,
+        'pretrained_lsd': pretrained_lsd.name,
         'embedding': embedding.name,
         'affs': affs.name,
         'gt_embedding': gt_embedding.name,
@@ -75,5 +81,4 @@ def create_network(input_shape, name):
 
 if __name__ == "__main__":
 
-    create_network((196, 196, 196), 'train_net')
-    create_network((336, 336, 336), 'test_net')
+    create_network((196, 196, 196), 10, 'lsd_context_net')
