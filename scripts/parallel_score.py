@@ -27,8 +27,8 @@ def contingencies_in_block(
         ignore=[0]):
     logging.debug("Calculating contingencies in {0}".format(block.read_roi))
     block_id = block.block_id
-    seg_in_block =  seg[block.read_roi].data
-    gt_seg_in_block = gt_seg[block.read_roi].data
+    seg_in_block =  seg[block.read_roi].to_ndarray()
+    gt_seg_in_block = gt_seg[block.read_roi].to_ndarray()
     seg_indices = np.ravel(seg_in_block)
     gt_seg_indices = np.ravel(gt_seg_in_block)
     ignored = np.logical_or(np.isin(seg_indices, ignore), np.isin(gt_seg_indices, ignore))
