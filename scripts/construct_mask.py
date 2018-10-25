@@ -5,6 +5,7 @@ import os
 import daisy
 import sys
 import csv
+from skimage import measure
 from scipy.ndimage import morphology
 
 logging.basicConfig(level=logging.DEBUG)
@@ -30,7 +31,7 @@ def second_pass(block, vol, mask, erosion_size):
     if np.any(known_background):
         logging.debug("{0} is a boundary region".format(block.write_roi))
         mask_in_block[known_background] = 1
-        zero_map = skimage.label(np.uint8(data == 0))
+        zero_map = measure.label(np.uint8(data == 0))
         overlaps = np.logical_and(zero_map, known_background)
         index = np.unravel_index(np.argmax(overlaps), overlaps.shape)
         background_id = zero_map[index]
