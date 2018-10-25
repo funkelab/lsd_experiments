@@ -39,7 +39,7 @@ def predict(
     chunk_request.add(raw, input_size)
     chunk_request.add(affs, output_size)
 
-    pipeline = Hdf5Source(
+    pipeline = ZarrSource(
             in_file,
             datasets = {
                 raw: in_dataset

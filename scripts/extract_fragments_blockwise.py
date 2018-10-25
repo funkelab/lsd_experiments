@@ -22,7 +22,8 @@ def extract_fragments(
         db_name,
         num_workers,
         fragments_in_xy,
-        mask_fragments,
+        epsilon_agglomerate=0,
+        mask_fragments=False,
         mask_file=None,
         mask_dataset=None):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
@@ -123,6 +124,7 @@ def extract_fragments(
         fragments,
         num_workers,
         fragments_in_xy,
+        epsilon_agglomerate=epsilon_agglomerate,
         mask=mask)
 
 if __name__ == "__main__":

@@ -76,6 +76,7 @@ def predict_blockwise(
 
     # load config
     with open(os.path.join(setup, 'config.json')) as f:
+        print("Reading setup config from %s"%os.path.join(setup, 'config.json'))
         net_config = json.load(f)
 
     out_dims = net_config['out_dims']
@@ -121,7 +122,12 @@ def predict_blockwise(
         source.voxel_size,
         out_dtype,
         write_roi=daisy.Roi((0, 0, 0), chunk_size),
-        num_channels=out_dims)
+        num_channels=out_dims,
+        # temporary fix until
+        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
+        # (we want gzip to be the default)
+        compressor={'id': 'zlib', 'level':5}
+        )
 
     print("Starting block-wise processing...")
 
