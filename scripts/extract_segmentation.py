@@ -15,7 +15,9 @@ def extract_segmentation(
         out_dataset,
         db_host,
         db_name,
-        threshold):
+        threshold,
+        roi_offset=None,
+        roi_shape=None):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
@@ -27,6 +29,10 @@ def extract_segmentation(
         mode='r')
 
     total_roi = fragments.roi
+    if roi_offset is not None:
+        assert roi_shape is not None, "If roi_offset is set, roi_shape " \
+                                      "also needs to be provided"
+        total_roi = daisy.Roi(offset=roi_offset, shape=roi_shape)
 
     # slice
     print("Reading fragments and RAG in %s"%total_roi)
