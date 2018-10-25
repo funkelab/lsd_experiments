@@ -56,7 +56,17 @@ def create_network(input_shape, name, scope):
         with open(name + '_config.json', 'w') as f:
             json.dump(config, f)
 
+def create_config(input_shape, output_shape, out_dims):
+    config = {
+        'input_shape': input_shape,
+        'output_shape': output_shape,
+        'out_dims': out_dims,
+        'out_dtype': "float32"}
+    with open('config.json', 'w') as f:
+        json.dump(config, f)
+
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net', 'setup02')
-    create_network((196, 196, 196), 'test_net', 'setup02')
+    create_network((352, 352, 352), 'test_net', 'setup02')
+    create_config((352, 352, 352), (248, 248, 248), 10)

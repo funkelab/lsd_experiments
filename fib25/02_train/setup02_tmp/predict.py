@@ -76,10 +76,10 @@ if __name__ == "__main__":
 
     read_roi = Roi(
         config['read_begin'],
-        config['read_shape'])
+        config['read_size'])
     write_roi = Roi(
         config['write_begin'],
-        config['write_shape'])
+        config['write_size'])
 
     predict(
         config['iteration'],

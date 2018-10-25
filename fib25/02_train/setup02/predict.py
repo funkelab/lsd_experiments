@@ -7,11 +7,11 @@ import os
 import sys
 import logging
 
-def predict(iteration, in_file, read_roi, out_file, write_roi):
+def predict(iteration, in_file, read_roi, out_file):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+    with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -20,8 +20,6 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
     voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
-    read_roi *= voxel_size
-    write_roi *= voxel_size
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
@@ -76,14 +74,9 @@ if __name__ == "__main__":
 
     read_roi = Roi(
         config['read_begin'],
-        config['read_shape'])
-    write_roi = Roi(
-        config['write_begin'],
-        config['write_shape'])
-
+        config['read_size'])
     predict(
         config['iteration'],
         config['in_file'],
         read_roi,
-        config['out_file'],
-        write_roi)
+        config['out_file'])

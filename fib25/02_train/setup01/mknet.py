@@ -11,11 +11,10 @@ def create_network(input_shape, name):
 
     unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-    affs_batched = mala.networks.conv_pass(
+    affs_batched, _ = mala.networks.conv_pass(
         unet,
         kernel_sizes=[1],
         num_fmaps=3,
-        num_repetitions=1,
         activation='sigmoid',
         name='affs')
 
@@ -56,7 +55,17 @@ def create_network(input_shape, name):
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
+def create_config(input_shape, output_shape, out_dims):
+    config = {
+        'input_shape': input_shape,
+        'output_shape': output_shape,
+        'out_dims': out_dims,
+        'out_dtype': "float32"}
+    with open('config.json', 'w') as f:
+        json.dump(config, f)
+
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
     create_network((352, 352, 352), 'test_net')
+    create_config((352, 352, 352), (248, 248, 248), 3)

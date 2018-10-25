@@ -1,1 +1,1 @@
-{"raw": "Placeholder:0", "gt_affs": "Placeholder_1:0", "optimizer": "Adam", "loss": "mean_squared_error/value:0", "affs_loss_weights": "Placeholder_2:0", "affs": "Reshape_1:0", "input_shape": [196, 196, 196], "output_shape": [92, 92, 92]}
+{"affs_loss_weights": "Placeholder_2:0", "affs": "Reshape_1:0", "output_shape": [92, 92, 92], "optimizer": "Adam", "input_shape": [196, 196, 196], "gt_affs": "Placeholder_1:0", "raw": "Placeholder:0", "loss": "mean_squared_error/value:0"}
