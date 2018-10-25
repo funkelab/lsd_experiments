@@ -24,8 +24,9 @@ def second_pass(block, vol, mask, erosion_size):
     read_shape = np.array((block.read_roi / vol.voxel_size).get_shape())
     write_shape = np.array((block.write_roi / vol.voxel_size).get_shape())
     dims = block.read_roi.dims()
+    working_mask = mask[block.read_roi].to_ndarray()
     data = vol[block.read_roi].to_ndarray()
-    known_background = data == 1
+    known_background = working_mask == 1
     fully_background = np.all(known_background)
     mask_in_block = np.full(read_shape, 2, dtype=np.uint8)
     
@@ -42,7 +43,7 @@ def second_pass(block, vol, mask, erosion_size):
         true_background = true_background < distance
         mask_in_block[true_background] = 1
     elif fully_background:
-        mask_in_block = np.full(read_shape, 1, dtype=np.uint8)
+        mask_in_block = np.ones(read_shape, dtype=np.uint8)
     else:
         logging.debug("{0} lies completely in interior".format(block.write_roi))
     
