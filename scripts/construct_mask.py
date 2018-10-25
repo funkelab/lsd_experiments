@@ -17,9 +17,9 @@ def first_pass(block, vol, mask):
     if not np.any(data):
         mask[block.write_roi] = np.ones(shape, dtype=np.uint8)
 
-def second_pass(block, vol, mask, context):
+def second_pass(block, vol, mask, erosion_size):
     logging.debug("Second pass in {0}, writing to {1}".format(block.read_roi, block.write_roi))
-    distance = np.linalg.norm(context)
+    distance = np.linalg.norm(erosion_size)
     read_shape = np.array((block.read_roi / vol.voxel_size).get_shape())
     write_shape = np.array((block.write_roi / vol.voxel_size).get_shape())
     dims = block.read_roi.dims()
@@ -32,48 +32,28 @@ def second_pass(block, vol, mask, context):
         mask_in_block[known_background] = 1
         zero_map = skimage.label(np.uint8(data == 0))
         overlaps = np.logical_and(zero_map, known_background)
-
-        if np.any(overlaps):
-            index = np.unravel_index(np.argmax(overlaps), overlaps.shape)
-            background_id = zero_map[index]
-            mask_in_block[zero_map == background_id] = 1
+        index = np.unravel_index(np.argmax(overlaps), overlaps.shape)
+        background_id = zero_map[index]
+        true_background = zero_map == background_id
+        true_foreground = np.logical_not(true_background)
+        true_background = morphology.distance_transform_edt(true_foreground)
+        true_background = true_background < distance
+        mask_in_block[true_background] = 1
     else:
         logging.debug("{0} lies completely in interior".format(block.write_roi))
     
-    mask[block.write_roi] = mask_in_block
+    block_in_world = daisy.Array(mask_in_block, block.read_roi, vol.voxel_size)
+    mask[block.write_roi] = block_in_world[block.write_roi]
 
 def binarize(block, mask):
     logging.debug("Binarizing mask in {0}".format(block.read_roi))
-
-def construct_mask_in_block(block, vol, mask, context):
-    logging.debug("Masking in {0}".format(block.read_roi))
-    shape = np.array((block.read_roi / vol.voxel_size).get_shape())
-    data = vol[block.read_roi].to_ndarray()
-    mask_in_block = np.ones(shape, dtype=np.uint16)
-    mask_in_block[data == 0] = 0
-    if not np.all(mask_in_block == 1) and np.count_nonzero(mask_in_block) > 0:
-        mask_in_block = morphology.binary_dilation(mask_in_block, structure=np.ones((15, 15, 15))).astype(np.uint16)
-        mask_in_block = morphology.binary_erosion(
-                mask_in_block,
-                structure=np.ones(np.uint32((context*2 + 1)/15)),
-                iterations=15,
-                border_value=1).astype(np.uint16)
-        mask_in_block = morphology.binary_erosion(
-                mask_in_block,
-                structure=np.ones((15, 15, 15)),
-                iterations=15,
-                border_value=1).astype(np.uint16)
-        mask[block.write_roi] = mask_in_block
-    elif np.all(mask_in_block == 1):
-        mask[block.write_roi] = np.ones(shape, dtype=np.uint16)
-        logging.debug("Block {0} is fully interior".format(block.read_roi))
-    logging.debug("Finished block {0}".format(block.read_roi))
 
 def construct_mask(
         in_file,
         to_mask,
         out_file,
-        context,
+        erosion_size,
+        mask_context,
         block_size,
         num_workers,
         retry):
@@ -119,20 +99,22 @@ def construct_mask(
 
     vol = daisy.open_ds(in_file, to_mask)
     total_roi = vol.roi
-    read_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
+    read_roi = daisy.Roi((0,)*vol.roi.dims(),
+                         [block_size[i] + mask_context[i]
+                             for i in range(vol.roi.dims())])
     write_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
 
     logging.debug("Constructing mask dataset in {0}".format(out_file))
-    mask = daisy.prepare_ds(out_file, 'volumes/labels/mask', vol.roi, vol.voxel_size, dtype=np.uint16)
+    mask = daisy.prepare_ds(out_file, 'volumes/labels/mask', vol.roi, vol.voxel_size, dtype=np.uint8)
     logging.info("Masking volume in {0}".format(in_file))
 
     # mask blocks in parallel
-    logging.info("Starting masking tasks")
+    logging.info("Starting first pass")
     for i in range(retry + 1):
         # TODO: check function
         if daisy.run_blockwise(
             total_roi,
-            read_roi,
+            write_roi,
             write_roi,
             lambda b: first_pass(
                 b,
@@ -145,7 +127,28 @@ def construct_mask(
                 break
 
         if i < retry:
-            logging.error("parallel mask failed, retrying %d/%d", i + 1, retry)
+            logging.error("first pass failed, retrying %d/%d", i + 1, retry)
+    
+    logging.info("Starting second pass")
+    for i in range(retry + 1):
+        # TODO: check function
+        if daisy.run_blockwise(
+            total_roi,
+            read_roi,
+            write_roi,
+            lambda b: second_pass(
+                b,
+                vol,
+                mask,
+                erosion_size),
+            fit='shrink',
+            processes=True,
+            num_workers=num_workers,
+            read_write_conflict=False):
+                break
+
+        if i < retry:
+            logging.error("second pass failed, retrying %d/%d", i + 1, retry)
 
 if __name__ == "__main__":
 
