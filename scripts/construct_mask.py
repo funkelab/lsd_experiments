@@ -9,6 +9,42 @@ from scipy.ndimage import morphology
 
 logging.basicConfig(level=logging.DEBUG)
 
+def first_pass(block, vol, mask):
+    logging.debug("First pass in {0}".format(block.read_roi))
+    shape = np.array((block.read_roi / vol.voxel_size).get_shape())
+    data = vol[block.read_roi].to_ndarray()
+
+    if not np.any(data):
+        mask[block.write_roi] = np.ones(shape, dtype=np.uint8)
+
+def second_pass(block, vol, mask, context):
+    logging.debug("Second pass in {0}, writing to {1}".format(block.read_roi, block.write_roi))
+    distance = np.linalg.norm(context)
+    read_shape = np.array((block.read_roi / vol.voxel_size).get_shape())
+    write_shape = np.array((block.write_roi / vol.voxel_size).get_shape())
+    dims = block.read_roi.dims()
+    data = vol[block.read_roi].to_ndarray()
+    known_background = data == 1
+    mask_in_block = np.full(read_shape, 2, dtype=np.uint8)
+    
+    if np.any(known_background):
+        logging.debug("{0} is a boundary region".format(block.write_roi))
+        mask_in_block[known_background] = 1
+        zero_map = skimage.label(np.uint8(data == 0))
+        overlaps = np.logical_and(zero_map, known_background)
+
+        if np.any(overlaps):
+            index = np.unravel_index(np.argmax(overlaps), overlaps.shape)
+            background_id = zero_map[index]
+            mask_in_block[zero_map == background_id] = 1
+    else:
+        logging.debug("{0} lies completely in interior".format(block.write_roi))
+    
+    mask[block.write_roi] = mask_in_block
+
+def binarize(block, mask):
+    logging.debug("Binarizing mask in {0}".format(block.read_roi))
+
 def construct_mask_in_block(block, vol, mask, context):
     logging.debug("Masking in {0}".format(block.read_roi))
     shape = np.array((block.read_roi / vol.voxel_size).get_shape())
@@ -98,11 +134,10 @@ def construct_mask(
             total_roi,
             read_roi,
             write_roi,
-            lambda b: construct_mask_in_block(
+            lambda b: first_pass(
                 b,
                 vol,
-                mask,
-                np.array(context)),
+                mask),
             fit='shrink',
             processes=True,
             num_workers=num_workers,
