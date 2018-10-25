@@ -81,12 +81,6 @@ def agglomerate(
     logging.info("Reading affs from %s", in_file)
     affs = daisy.open_ds(in_file, affs_dataset, mode='r')
 
-    if mask_fragments:
-        
-        mask_ds = 'volumes/labels/mask'
-        logging.info("Reading mask from %s", in_file)
-        mask = daisy.open_ds(in_file, mask_ds, mode='r')
-
     logging.info("Reading fragments from %s", in_file)
     fragments = daisy.open_ds(in_file, fragments_dataset, mode='r')
 
