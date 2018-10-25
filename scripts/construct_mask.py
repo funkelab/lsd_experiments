@@ -26,9 +26,10 @@ def second_pass(block, vol, mask, erosion_size):
     dims = block.read_roi.dims()
     data = vol[block.read_roi].to_ndarray()
     known_background = data == 1
+    fully_background = np.all(known_background)
     mask_in_block = np.full(read_shape, 2, dtype=np.uint8)
     
-    if np.any(known_background):
+    if np.any(known_background) and not fully_background:
         logging.debug("{0} is a boundary region".format(block.write_roi))
         mask_in_block[known_background] = 1
         zero_map = measure.label(np.uint8(data == 0))
@@ -40,6 +41,8 @@ def second_pass(block, vol, mask, erosion_size):
         true_background = morphology.distance_transform_edt(true_foreground)
         true_background = true_background < distance
         mask_in_block[true_background] = 1
+    elif fully_background:
+        mask_in_block = np.full(read_shape, 1, dtype=np.uint8)
     else:
         logging.debug("{0} lies completely in interior".format(block.write_roi))
     
