@@ -6,52 +6,44 @@ import daisy
 import sys
 import csv
 from skimage import measure
-from scipy.ndimage import morphology
+from scipy.ndimage import filters, morphology
 
 logging.basicConfig(level=logging.DEBUG)
 
-def first_pass(block, vol, mask):
-    logging.debug("First pass in {0}".format(block.read_roi))
-    shape = np.array((block.read_roi / vol.voxel_size).get_shape())
-    data = vol[block.read_roi].to_ndarray()
+def touching_edge(inds, shape):
+    if np.any(inds == 0):
+        return True
+    for d in range(len(shape)):
+        if np.any(inds[d] == shape[d]-1):
+            return True
+    return False
 
-    if not np.any(data):
-        mask[block.write_roi] = np.ones(shape, dtype=np.uint8)
-
-def second_pass(block, vol, mask, erosion_size):
-    logging.debug("Second pass in {0}, writing to {1}".format(block.read_roi, block.write_roi))
-    distance = np.linalg.norm(erosion_size)
+def mask_in_block(block, vol, mask):
+    logging.debug("Masking in {0}".format(block))
     read_shape = np.array((block.read_roi / vol.voxel_size).get_shape())
-    write_shape = np.array((block.write_roi / vol.voxel_size).get_shape())
     dims = block.read_roi.dims()
-    working_mask = mask[block.read_roi].to_ndarray()
-    data = vol[block.read_roi].to_ndarray()
-    known_background = working_mask == 1
-    fully_background = np.all(known_background)
-    mask_in_block = np.full(read_shape, 2, dtype=np.uint8)
+    data = filters.gaussian_filter(vol.to_ndarray(block.read_roi, 0), 3)
     
-    if np.any(known_background) and not fully_background:
-        logging.debug("{0} is a boundary region".format(block.write_roi))
-        mask_in_block[known_background] = 1
-        zero_map = measure.label(np.uint8(data == 0))
-        overlaps = np.logical_and(zero_map, known_background)
-        index = np.unravel_index(np.argmax(overlaps), overlaps.shape)
-        background_id = zero_map[index]
-        true_background = zero_map == background_id
-        true_foreground = np.logical_not(true_background)
-        true_background = morphology.distance_transform_edt(true_foreground)
-        true_background = true_background < distance
-        mask_in_block[true_background] = 1
-    elif fully_background:
-        mask_in_block = np.ones(read_shape, dtype=np.uint8)
-    else:
-        logging.debug("{0} lies completely in interior".format(block.write_roi))
-    
+    mask_in_block = np.ones(read_shape, dtype=np.uint8)
+    potential_background = measure.label(np.uint8(data == 0))
+    background_props = measure.regionprops(potential_background)
+
+    for region in background_props:
+        coords = region.coords
+        inds = np.moveaxis(coords, -1, 0)
+        if touching_edge(inds, read_shape):
+            mask_in_block[tuple(inds)] = 0
+
     block_in_world = daisy.Array(mask_in_block, block.read_roi, vol.voxel_size)
     mask[block.write_roi] = block_in_world[block.write_roi]
 
-def binarize(block, mask):
-    logging.debug("Binarizing mask in {0}".format(block.read_roi))
+def erode_in_block(block, mask, erosion_size):
+    distance = np.linalg.norm(erosion_size)
+    mask_in_block = mask[block.read_roi].to_ndarray()
+    foreground = mask_in_block == 1
+    distances = morphology.distance_transform_edt(foreground)
+    mask_in_block = np.uint8(distances < distance)
+    mask[block.write_roi] = mask_in_block
 
 def construct_mask(
         in_file,
@@ -103,14 +95,18 @@ def construct_mask(
     logging.info("Reading volume from {0} with dataset {1}".format(in_file, to_mask))
 
     vol = daisy.open_ds(in_file, to_mask)
-    total_roi = vol.roi
+    total_roi = vol.roi.grow(daisy.Coordinate(mask_context),
+                             daisy.Coordinate(mask_context))
+    """
     read_roi = daisy.Roi((0,)*vol.roi.dims(),
-                         [block_size[i] + mask_context[i]
-                             for i in range(vol.roi.dims())])
+                         block_size).grow(None, daisy.Coordinate(mask_context))
+    write_roi = read_roi.grow(-(daisy.Coordinate(mask_context)), -daisy.Coordinate(mask_context))
+    """
     write_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
+    read_roi = write_roi.grow(daisy.Coordinate(mask_context), daisy.Coordinate(mask_context))
 
     logging.debug("Constructing mask dataset in {0}".format(out_file))
-    mask = daisy.prepare_ds(out_file, 'volumes/labels/mask', vol.roi, vol.voxel_size, dtype=np.uint8)
+    mask = daisy.prepare_ds(out_file, 'volumes/labels/mask', vol.roi, vol.voxel_size, dtype=np.uint8, write_roi = write_roi)
     logging.info("Masking volume in {0}".format(in_file))
 
     # mask blocks in parallel
@@ -119,9 +115,9 @@ def construct_mask(
         # TODO: check function
         if daisy.run_blockwise(
             total_roi,
+            read_roi,
             write_roi,
-            write_roi,
-            lambda b: first_pass(
+            lambda b: mask_in_block(
                 b,
                 vol,
                 mask),
@@ -134,16 +130,16 @@ def construct_mask(
         if i < retry:
             logging.error("first pass failed, retrying %d/%d", i + 1, retry)
     
+    # erode blocks in parallel
     logging.info("Starting second pass")
     for i in range(retry + 1):
         # TODO: check function
         if daisy.run_blockwise(
             total_roi,
             read_roi,
-            write_roi,
-            lambda b: second_pass(
+            read_roi,
+            lambda b: erode_in_block(
                 b,
-                vol,
                 mask,
                 erosion_size),
             fit='shrink',
