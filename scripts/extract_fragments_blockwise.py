@@ -11,9 +11,6 @@ logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def extract_fragments(
-        experiment,
-        setup,
-        iteration,
         affs_file,
         affs_dataset,
         block_size,
@@ -30,18 +27,6 @@ def extract_fragments(
     predicted before.
 
     Args:
-
-        experiment (``string``):
-
-            Name of the experiment (cremi, fib19, fib25, ...).
-
-        setup (``string``):
-
-            Name of the setup to predict.
-
-        iteration (``int``):
-
-            Training iteration to predict from.
 
         affs_file,
         affs_dataset,
