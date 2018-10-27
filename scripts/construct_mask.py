@@ -39,7 +39,8 @@ def mask_in_block(block, vol, mask):
 
 def erode_in_block(block, mask, erosion_size):
     logging.debug("Eroding in {0}".format(block))
-    distance = np.linalg.norm(erosion_size)
+    # distance is padded to counteract dilation from blurring
+    distance = np.linalg.norm(erosion_size) + np.sqrt(27)
     mask_in_block = mask[block.read_roi].to_ndarray()
     if (not np.all(mask_in_block)) and np.any(mask_in_block == 0):
         logging.debug("Boundary in {0}".format(block))
