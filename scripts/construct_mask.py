@@ -38,12 +38,13 @@ def mask_in_block(block, vol, mask):
     mask[block.write_roi] = block_in_world[block.write_roi]
 
 def erode_in_block(block, mask, erosion_size):
+    logging.debug("Eroding in {0}".format(block))
     distance = np.linalg.norm(erosion_size)
     mask_in_block = mask[block.read_roi].to_ndarray()
-    foreground = mask_in_block == 1
-    distances = morphology.distance_transform_edt(foreground)
-    mask_in_block = np.uint8(distances < distance)
-    mask[block.write_roi] = mask_in_block
+    if (not np.all(mask_in_block)) and np.any(mask_in_block == 0):
+        distances = morphology.distance_transform_edt(foreground)
+        mask_in_block = np.uint8(distances >= distance)
+        mask[block.write_roi] = mask_in_block
 
 def construct_mask(
         in_file,
