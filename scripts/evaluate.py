@@ -5,17 +5,14 @@ import logging
 import lsd
 import malis
 import numpy as np
-import os
 import scipy
 import sys
 import waterz
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def evaluate(
-        experiment,
-        setup,
-        iteration,
         gt_file,
         gt_dataset,
         fragments_file,
@@ -23,14 +20,8 @@ def evaluate(
         border_threshold,
         db_host,
         db_name,
-        thresholds):
-
-    experiment_dir = '../' + experiment
-    predict_dir = os.path.join(
-        experiment_dir,
-        '03_predict',
-        setup,
-        str(iteration))
+        thresholds_minmax,
+        thresholds_step):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
@@ -44,29 +35,30 @@ def evaluate(
     #open score DB
 
     client = MongoClient(db_host)
-    database = client[db_name]
+    database = client['test_cremi_evaluation']
     score_collection = database['scores']
 
     total_roi = fragments.roi
 
     # slice
-    print("Reading fragments and RAG in %s"%total_roi)
+    logger.info("Reading fragments and RAG in %s", total_roi)
     fragments = fragments[total_roi]
     rag = rag_provider[total_roi]
 
-    print("Number of nodes in RAG: %d"%(len(rag.nodes())))
-    print("Number of edges in RAG: %d"%(len(rag.edges())))
+    logger.info("Number of nodes in RAG: %d", len(rag.nodes()))
+    logger.info("Number of edges in RAG: %d", len(rag.edges()))
 
     #read gt data
     gt = daisy.open_ds(gt_file, gt_dataset)
+    common_roi = fragments.roi.intersect(gt.roi)
 
     # evaluate only where we have both fragments and GT
-    common_roi = fragments.roi.intersect(gt.roi)
+    logger.info("Cropping fragments and GT to common ROI %s", common_roi)
     fragments = fragments[common_roi]
     gt = gt[common_roi]
-    print("Cropped fragments and GT to common ROI %s"%common_roi)
 
     #relabel connected components
+    logger.info("Relabelling connected components in GT...")
     gt.materialize()
     components = gt.data
     dtype = components.dtype
@@ -83,77 +75,78 @@ def evaluate(
     components[gt.data>np.uint64(-10)] = 0
     gt.data = components.astype(dtype)
 
-    print('Relabeled connected components')
-   
-   #check connected components
-    '''print("Writing connected components gt...")
-    ground_truth = daisy.prepare_ds(
-        predict_file,
-        'volumes/gt_connected_components',
-        gt.roi,
-        gt.voxel_size,
-        gt.data.dtype)
-    ground_truth.data[:] = gt.data'''
-
-
+    logger.info("Creating 2D border mask...")
     for z in range(gt.data.shape[0]):
         border_mask = create_border_mask_2d(
             gt.data[z],
             float(border_threshold)/gt.voxel_size[1])
         gt.data[z][border_mask] = 0
 
-    print('Created 2d border mask')
-    
-    #check border mask
-    '''print("Writing border mask gt...")
-    ground_truth = daisy.prepare_ds(
-        predict_file,
-        'volumes/gt_border_mask',
-        gt.roi,
-        gt.voxel_size,
-        gt.data.dtype)
-    ground_truth.data[:] = gt.data'''
+    # DEBUG
+    #
+    # logger.info("Writing GT to debug file...")
+    # ground_truth = daisy.prepare_ds(
+        # 'debug_evaluation.zarr',
+        # 'volumes/gt',
+        # gt.roi,
+        # gt.voxel_size,
+        # gt.data.dtype)
+    # ground_truth.data[:] = gt.data
+    # logger.info("Writing fragments to debug file...")
+    # fragments_ds = daisy.prepare_ds(
+        # 'debug_evaluation.zarr',
+        # 'volumes/fragments',
+        # fragments.roi,
+        # fragments.voxel_size,
+        # fragments.data.dtype)
+    # fragments_ds.data[:] = fragments.data
 
-    thresholds = list(np.arange(thresholds[0], thresholds[1], 0.1))
+    thresholds = list(np.arange(
+        thresholds_minmax[0],
+        thresholds_minmax[1],
+        thresholds_step))
 
     for threshold in thresholds:
 
         segmentation = fragments.to_ndarray()
 
         # create a segmentation
-        print("Creating segmentation for threshold %f..."%threshold)
+        logger.info("Creating segmentation for threshold %f...", threshold)
         rag.get_segmentation(threshold, segmentation)
 
-        # store segmentation
-        '''print("Writing segmentation...")
-        seg = daisy.prepare_ds(
-            predict_file,
-            'volumes/segmentation',
-            fragments.roi,
-            fragments.voxel_size,
-            fragments.data.dtype)
-        seg.data[:] = segmentation.data'''
+        # DEBUG
+        #
+        # logger.info("Writing segmentation to debug file...")
+        # seg = daisy.prepare_ds(
+            # 'debug_evaluation.zarr',
+            # 'volumes/segmentation_%d'%(threshold*100),
+            # fragments.roi,
+            # fragments.voxel_size,
+            # fragments.data.dtype)
+        # seg.data[:] = segmentation
 
         #get VOI and RAND
-        print("Calculating VOI scores for threshold %f..."%threshold)
+        logger.info("Calculating VOI scores for threshold %f...", threshold)
         metrics = waterz.evaluate(segmentation, gt.data)
 
         voi_sum = np.array(metrics['voi_split'] + metrics['voi_merge'], dtype=np.float32)
         a_rand = np.array(1.0 - (2.0*metrics['rand_split']*metrics['rand_merge'])/(metrics['rand_split']+metrics['rand_merge']), dtype=np.float32)
         cremi_score = np.sqrt(np.array(voi_sum*a_rand).astype(float))
 
-        print('VOI sum:', voi_sum)
-        print('Adapted rand:', a_rand)
-        print('CREMI score:', cremi_score)
+        logger.info('VOI sum: %f', voi_sum)
+        logger.info('Adapted rand: %f', a_rand)
+        logger.info('CREMI score: %f', cremi_score)
 
         #store values in db
-        print("Storing VOI and RAND values for threshold %f in DB" %threshold)
-        metrics.update({'threshold': threshold})
-        metrics.update({'db_name': db_name})
-        metrics.update({'cremi_score': cremi_score})
+        logger.info("Storing VOI and RAND values for threshold %f in DB" %threshold)
+        metrics.update({
+            'threshold': threshold,
+            'db_name': db_name,
+            'cremi_score': cremi_score
+        })
         score_collection.insert(metrics)
 
-        print(metrics)
+        logger.info(metrics)
 
 def create_border_mask_2d(image, max_dist):
     """
