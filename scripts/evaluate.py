@@ -19,7 +19,8 @@ def evaluate(
         fragments_dataset,
         border_threshold,
         db_host,
-        db_name,
+        rag_db_name,
+        scores_db_name,
         thresholds_minmax,
         thresholds_step):
 
@@ -28,14 +29,14 @@ def evaluate(
 
     # open RAG DB
     rag_provider = lsd.persistence.MongoDbRagProvider(
-        db_name,
+        rag_db_name,
         host=db_host,
         mode='r')
 
     #open score DB
 
     client = MongoClient(db_host)
-    database = client['test_cremi_evaluation']
+    database = client[scores_db_name]
     score_collection = database['scores']
 
     total_roi = fragments.roi
