@@ -42,6 +42,7 @@ def erode_in_block(block, mask, erosion_size):
     distance = np.linalg.norm(erosion_size)
     mask_in_block = mask[block.read_roi].to_ndarray()
     if (not np.all(mask_in_block)) and np.any(mask_in_block == 0):
+        logging.debug("Boundary in {0}".format(block))
         distances = morphology.distance_transform_edt(foreground)
         mask_in_block = np.uint8(distances >= distance)
         mask[block.write_roi] = mask_in_block
