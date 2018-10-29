@@ -15,6 +15,7 @@ def extract_segmentation(
         out_dataset,
         db_host,
         db_name,
+        edges_collection,
         threshold,
         roi_offset=None,
         roi_shape=None):
@@ -26,7 +27,8 @@ def extract_segmentation(
     rag_provider = lsd.persistence.MongoDbRagProvider(
         db_name,
         host=db_host,
-        mode='r')
+        mode='r',
+        edges_collection=edges_collection)
 
     total_roi = fragments.roi
     if roi_offset is not None:

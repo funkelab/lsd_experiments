@@ -194,7 +194,13 @@ def predict_in_block(
 
     print("Hash for block at %s is %d"%(write_roi, config_hash))
 
-    config_file = '%d.config'%config_hash
+    try:
+        os.makedirs('.predict_configs')
+    except:
+        pass
+    config_file = os.path.join('.predict_configs', '%d.config'%config_hash)
+    log_out = os.path.join('.predict_configs', '%d.out'%config_hash)
+    log_err = os.path.join('.predict_configs', '%d.err'%config_hash)
     with open(config_file, 'w') as f:
         json.dump(config, f)
 
@@ -204,20 +210,20 @@ def predict_in_block(
         'run_lsf',
         '-c', '5',
         '-g', '1',
-        '-d', 'funkey/lsd:v0.5',
+        '-d', 'funkey/lsd:v0.6',
         'python -u %s %s'%(
             predict_script,
             config_file
         )],
-        log_out='%d.out'%config_hash,
-        log_err='%d.err'%config_hash)
+        log_out=log_out,
+        log_err=log_err)
 
     print("Finished block with config %s..."%config_file)
 
-    # if things went well, remove temporary files
-    os.remove(config_file)
-    os.remove('%d.out'%config_hash)
-    os.remove('%d.err'%config_hash)
+    # # if things went well, remove temporary files
+    # os.remove(config_file)
+    # os.remove(log_out)
+    # os.remove(log_err)
 
 def check_block(out_file, out_dataset, block):
 

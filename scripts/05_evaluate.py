@@ -20,9 +20,11 @@ def evaluate(
         border_threshold,
         db_host,
         rag_db_name,
+        edges_collection,
         scores_db_name,
         thresholds_minmax,
-        thresholds_step):
+        thresholds_step,
+        configuration):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
@@ -31,7 +33,8 @@ def evaluate(
     rag_provider = lsd.persistence.MongoDbRagProvider(
         rag_db_name,
         host=db_host,
-        mode='r')
+        mode='r',
+        edges_collection=edges_collection)
 
     #open score DB
 
@@ -142,9 +145,9 @@ def evaluate(
         logger.info("Storing VOI and RAND values for threshold %f in DB" %threshold)
         metrics.update({
             'threshold': threshold,
-            'db_name': db_name,
             'cremi_score': cremi_score
         })
+        metrics.update(configuration)
         score_collection.insert(metrics)
 
         logger.info(metrics)
