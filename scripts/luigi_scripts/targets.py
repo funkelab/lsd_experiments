@@ -1,8 +1,11 @@
 import luigi
 import os
-import z5py
+import zarr
 import json
 import pymongo
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FileTarget(luigi.Target):
 
@@ -21,25 +24,26 @@ class N5DatasetTarget(luigi.Target):
 
     def exists(self):
 
-        print("Checking if %s exists..."%self.filename)
+        logger.debug("Checking if %s exists...", self.filename)
         if not os.path.isdir(self.filename):
-            print("%s does NOT exist"%self.filename)
+            logger.debug("%s does NOT exist", self.filename)
             return False
+
+        logger.debug(
+            "Checking if dataset %s is in %s...",
+            self.dataset,
+            self.filename)
         try:
-            print(
-                "Checking if dataset %s is in %s..."%(
-                    self.dataset,
-                    self.filename))
-            with z5py.File(self.filename, use_zarr_format=False, mode='r') as f:
-                exists = self.dataset in f
-                if not exists:
-                    print("%s is NOT contained in %s"%(self.dataset, self.filename))
-                else:
-                    print("%s is contained in %s"%(self.dataset, self.filename))
-                return exists
-        except e:
-            print("exception when trying to access %s: %s"%(self.filename, e))
+            f = zarr.open(self.filename, mode='r')
+            exists = self.dataset in f
+        except:
             return False
+
+        if not exists:
+            logger.debug("%s is NOT contained in %s", self.dataset, self.filename)
+        else:
+            logger.debug("%s is contained in %s", self.dataset, self.filename)
+        return exists
 
 class N5AttributeTarget(luigi.Target):
 
@@ -65,17 +69,13 @@ class JsonTarget(luigi.Target):
         self.value = value
 
     def exists(self):
-        # print "Looking for %s:%s in %s"%(self.key,self.value,self.filename)
         if not os.path.isfile(self.filename):
-            # print "%s does not exist"%self.filename
             return False
         try:
             with open(self.filename) as f:
                 d = json.load(f)
                 if not self.key in d:
-                    # print "no key %s"%self.key
                     return False
-                # print "%s == %s?"%(self.value,d[self.key])
                 return self.value == d[self.key]
         except:
             return False
@@ -91,25 +91,63 @@ class MongoDbCollectionTarget(luigi.Target):
 
     def exists(self):
 
-        print("Host %s, DB %s, collection %s"%(self.db_host, self.db_name,
-            self.collection))
+        logger.debug(
+            "Host %s, DB %s, collection %s",
+            self.db_host,
+            self.db_name,
+            self.collection)
         client = pymongo.MongoClient(self.db_host)
         db = client[self.db_name]
 
         exists = self.collection in db.list_collection_names()
         if not exists:
-            print("collection %s does NOT exist in %s"%(self.collection,
-                self.db_name))
+            logger.debug(
+                "collection %s does NOT exist in %s",
+                self.collection,
+                self.db_name)
             return False
 
         if self.require_nonempty:
 
             empty = db[self.collection].count() == 0
             if empty:
-                print("collection %s is EMPTY"%self.collection)
+                logger.debug(
+                    "collection %s is EMPTY",
+                    self.collection)
 
             return not empty
 
         else:
 
             return exists
+
+class MongoDbDocumentTarget(luigi.Target):
+
+    def __init__(self, db_name, db_host, collection, partial_document):
+
+        self.db_name = db_name
+        self.db_host = db_host
+        self.collection = collection
+        self.partial_document = partial_document
+
+    def exists(self):
+
+        logger.debug(
+            "Host %s, DB %s, collection %s",
+            self.db_host,
+            self.db_name,
+            self.collection)
+        client = pymongo.MongoClient(self.db_host)
+        db = client[self.db_name]
+
+        exists = self.collection in db.list_collection_names()
+        if not exists:
+            logger.debug(
+                "collection %s does NOT exist in %s",
+                self.collection,
+                self.db_name)
+            return False
+
+        collection = db[self.collection]
+
+        return collection.count_documents(self.partial_document) > 0

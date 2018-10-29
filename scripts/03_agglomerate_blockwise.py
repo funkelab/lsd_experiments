@@ -12,9 +12,6 @@ logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
-        experiment,
-        setup,
-        iteration,
         in_file,
         affs_dataset,
         fragments_dataset,
@@ -28,18 +25,6 @@ def agglomerate(
     predicted before.
 
     Args:
-
-        experiment (``string``):
-
-            Name of the experiment (cremi, fib19, fib25, ...).
-
-        setup (``string``):
-
-            Name of the setup to predict.
-
-        iteration (``int``):
-
-            Training iteration to predict from.
 
         in_file (``string``):
 
@@ -69,14 +54,25 @@ def agglomerate(
         num_workers (``int``):
 
             How many blocks to run in parallel.
+
+        merge_function (``string``):
+
+            Symbolic name of a merge function. See dictionary below.
     '''
 
-    experiment_dir = '../' + experiment
-    predict_dir = os.path.join(
-        experiment_dir,
-        '03_predict',
-        setup,
-        str(iteration))
+    waterz_merge_function = {
+        'hist_quant_10': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 10, ScoreValue, 256, false>>',
+        'hist_quant_10_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 10, ScoreValue, 256, true>>',
+        'hist_quant_25': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 25, ScoreValue, 256, false>>',
+        'hist_quant_25_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 25, ScoreValue, 256, true>>',
+        'hist_quant_50': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256, false>>',
+        'hist_quant_50_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256, true>>',
+        'hist_quant_75': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 75, ScoreValue, 256, false>>',
+        'hist_quant_75_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 75, ScoreValue, 256, true>>',
+        'hist_quant_90': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 90, ScoreValue, 256, false>>',
+        'hist_quant_90_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 90, ScoreValue, 256, true>>',
+        'mean': 'OneMinus<MeanAffinity<RegionGraphType, ScoreValue>>',
+    }[merge_function]
 
     logging.info("Reading affs from %s", in_file)
     affs = daisy.open_ds(in_file, affs_dataset, mode='r')
@@ -89,7 +85,8 @@ def agglomerate(
     rag_provider = lsd.persistence.MongoDbRagProvider(
         db_name,
         host=db_host,
-        mode='r+')
+        mode='r+',
+        edges_collection='edges_' + merge_function)
     logging.info("RAG DB opened")
 
     # agglomerate in parallel
@@ -100,7 +97,7 @@ def agglomerate(
         rag_provider,
         block_size,
         context,
-        merge_function=merge_function,
+        merge_function=waterz_merge_function,
         threshold=1.0,
         num_workers=num_workers)
 
