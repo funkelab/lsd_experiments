@@ -7,8 +7,11 @@ import malis
 import os
 import math
 import json
+import logging
 import tensorflow as tf
 import numpy as np
+
+logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/training'
 samples = [
@@ -110,7 +113,7 @@ def train_until(max_iteration):
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
-            num_workers=10) +
+            num_workers=16) +
         Train(
             'train_net',
             optimizer=config['optimizer'],
@@ -127,7 +130,7 @@ def train_until(max_iteration):
                 config['affs']: affs
             },
             gradients={},
-            save_every=10000) +
+            save_every=100000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
@@ -140,7 +143,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=10000,
+            every=100000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -153,6 +156,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)

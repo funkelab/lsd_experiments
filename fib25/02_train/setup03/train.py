@@ -107,7 +107,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=16) +
         Predict(
-            checkpoint='../setup02/train_net_checkpoint_200000',
+            checkpoint='../setup02_tmp/train_net_checkpoint_400000',
             graph='lsd_net.meta',
             inputs={
                 lsd_config['raw']: raw
