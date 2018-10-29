@@ -44,7 +44,7 @@ def erode_in_block(block, mask, erosion_size):
     mask_in_block = mask[block.read_roi].to_ndarray()
     if (not np.all(mask_in_block)) and np.any(mask_in_block == 0):
         logging.debug("Boundary in {0}".format(block))
-        distances = morphology.distance_transform_edt(foreground)
+        distances = morphology.distance_transform_edt(mask_in_block)
         mask_in_block = np.uint8(distances >= distance)
         mask[block.write_roi] = mask_in_block
 
@@ -100,18 +100,13 @@ def construct_mask(
     vol = daisy.open_ds(in_file, to_mask)
     total_roi = vol.roi.grow(daisy.Coordinate(mask_context),
                              daisy.Coordinate(mask_context))
-    """
-    read_roi = daisy.Roi((0,)*vol.roi.dims(),
-                         block_size).grow(None, daisy.Coordinate(mask_context))
-    write_roi = read_roi.grow(-(daisy.Coordinate(mask_context)), -daisy.Coordinate(mask_context))
-    """
     write_roi = daisy.Roi((0,)*vol.roi.dims(), block_size)
     read_roi = write_roi.grow(daisy.Coordinate(mask_context), daisy.Coordinate(mask_context))
 
     logging.debug("Constructing mask dataset in {0}".format(out_file))
     mask = daisy.prepare_ds(out_file, 'volumes/labels/mask', vol.roi, vol.voxel_size, dtype=np.uint8, write_roi = write_roi)
     logging.info("Masking volume in {0}".format(in_file))
-
+    
     # mask blocks in parallel
     logging.info("Starting first pass")
     for i in range(retry + 1):
@@ -138,7 +133,7 @@ def construct_mask(
     for i in range(retry + 1):
         # TODO: check function
         if daisy.run_blockwise(
-            total_roi,
+            mask.roi,
             read_roi,
             read_roi,
             lambda b: erode_in_block(
