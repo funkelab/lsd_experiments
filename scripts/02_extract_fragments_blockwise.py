@@ -13,6 +13,8 @@ logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 def extract_fragments(
         affs_file,
         affs_dataset,
+        fragments_file,
+        fragments_dataset,
         block_size,
         context,
         db_host,
@@ -80,8 +82,8 @@ def extract_fragments(
 
     # prepare fragments dataset
     fragments = daisy.prepare_ds(
-        affs_file,
-        'volumes/fragments',
+        fragments_file,
+        fragments_dataset,
         affs.roi,
         affs.voxel_size,
         np.uint64,

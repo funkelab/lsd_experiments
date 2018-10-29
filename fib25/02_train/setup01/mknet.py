@@ -2,7 +2,7 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, name, make_config=False):
 
     tf.reset_default_graph()
 
@@ -54,18 +54,23 @@ def create_network(input_shape, name):
         'output_shape': output_shape}
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
-
-def create_config(input_shape, output_shape, out_dims):
-    config = {
-        'input_shape': input_shape,
-        'output_shape': output_shape,
-        'out_dims': out_dims,
-        'out_dtype': "float32"}
-    with open('config.json', 'w') as f:
-        json.dump(config, f)
+    
+    if make_config:
+        config = {
+            'raw': raw.name,
+            'affs': affs.name,
+            'gt_affs': gt_affs.name,
+            'affs_loss_weights': affs_loss_weights.name,
+            'loss': loss.name,
+            'optimizer': optimizer.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape,
+            'out_dims': 3,
+            'out_dtype': "float32"}
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((352, 352, 352), 'test_net')
-    create_config((352, 352, 352), (248, 248, 248), 3)
+    create_network((352, 352, 352), 'test_net', make_config=True)

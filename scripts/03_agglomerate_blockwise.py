@@ -12,8 +12,9 @@ logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
-        in_file,
+        affs_file,
         affs_dataset,
+        fragments_file,
         fragments_dataset,
         block_size,
         context,
@@ -74,11 +75,11 @@ def agglomerate(
         'mean': 'OneMinus<MeanAffinity<RegionGraphType, ScoreValue>>',
     }[merge_function]
 
-    logging.info("Reading affs from %s", in_file)
-    affs = daisy.open_ds(in_file, affs_dataset, mode='r')
+    logging.info("Reading affs from %s", affs_file)
+    affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
 
-    logging.info("Reading fragments from %s", in_file)
-    fragments = daisy.open_ds(in_file, fragments_dataset, mode='r')
+    logging.info("Reading fragments from %s", fragments_file)
+    fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r')
 
     # open RAG DB
     logging.info("Opening RAG DB...")

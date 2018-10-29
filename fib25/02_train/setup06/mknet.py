@@ -2,20 +2,19 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, name, make_config=False):
 
     tf.reset_default_graph()
 
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-    affs_batched = mala.networks.conv_pass(
+    affs_batched, _ = mala.networks.conv_pass(
         unet,
-        kernel_size=1,
+        kernel_sizes=[1],
         num_fmaps=3,
-        num_repetitions=1,
         activation='sigmoid',
         name='affs')
 
@@ -26,10 +25,13 @@ def create_network(input_shape, name):
 
     gt_affs = tf.placeholder(tf.float32, shape=output_shape)
     affs_loss_weights = tf.placeholder(tf.float32, shape=output_shape)
+    
     loss = tf.losses.mean_squared_error(
         gt_affs,
         affs,
         affs_loss_weights)
+
+    summary = tf.summary.scalar('setup13_euc_loss', loss)
 
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
@@ -52,12 +54,27 @@ def create_network(input_shape, name):
         'loss': loss.name,
         'optimizer': optimizer.name,
         'input_shape': input_shape,
-        'output_shape': output_shape}
+        'output_shape': output_shape,
+        'summary': summary.name}
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
+
+    if make_config:
+        config = {
+            'raw': raw.name,
+            'affs': affs.name,
+            'gt_affs': gt_affs.name,
+            'affs_loss_weights': affs_loss_weights.name,
+            'loss': loss.name,
+            'optimizer': optimizer.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape,
+            'summary': summary.name,
+            'out_dims': 3}
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    # TODO: find largest test size
-    # create_network((196, 196, 196), 'test_net')
+    create_network((352, 352, 352), 'test_net', make_config=True)
