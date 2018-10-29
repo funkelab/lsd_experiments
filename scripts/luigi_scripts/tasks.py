@@ -195,6 +195,8 @@ class ExtractFragmentsTask(LsdTask):
             json.dump({
                 'affs_file': self.output_filename(),
                 'affs_dataset': 'volumes/affs',
+                'fragments_file': self.output_filename(),
+                'fragments_dataset': 'volumes/fragments',
                 'block_size': self.block_size,
                 'context': self.context,
                 'db_host': db_host,
@@ -279,8 +281,9 @@ class AgglomerateTask(LsdTask):
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
             json.dump({
-                'in_file': self.input_filename(),
+                'affs_file': self.input_filename(),
                 'affs_dataset': 'volumes/affs',
+                'fragments_file': self.input_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'block_size': self.block_size,
                 'context': self.context,
