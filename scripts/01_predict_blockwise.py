@@ -70,7 +70,11 @@ def predict_blockwise(
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source = daisy.open_ds(in_file, in_dataset)
+    try:
+        source = daisy.open_ds(in_file, in_dataset)
+    except:
+        in_dataset = in_dataset + '/s0'
+        source = daisy.open_ds(in_file, in_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
