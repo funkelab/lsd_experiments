@@ -4,6 +4,7 @@ import lsd
 import os
 import daisy
 import sys
+from parallel_read_rag import parallel_read_rag
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.mongodb_rag_provider').setLevel(logging.DEBUG)
@@ -18,7 +19,8 @@ def extract_segmentation(
         edges_collection,
         threshold,
         roi_offset=None,
-        roi_shape=None):
+        roi_shape=None,
+        num_workers=1):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
@@ -39,7 +41,14 @@ def extract_segmentation(
     # slice
     print("Reading fragments and RAG in %s"%total_roi)
     fragments = fragments[total_roi]
-    rag = rag_provider[total_roi]
+    rag = parallel_read_rag(
+        total_roi,
+        db_host,
+        db_name,
+        edges_collection=edges_collection,
+        block_size=(4096, 4096, 4096),
+        num_workers=num_workers,
+        retry=0)
 
     print("Number of nodes in RAG: %d"%(len(rag.nodes())))
     print("Number of edges in RAG: %d"%(len(rag.edges())))
