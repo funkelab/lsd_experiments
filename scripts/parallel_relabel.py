@@ -8,22 +8,23 @@ import logging
 from concurrent.futures  import ProcessPoolExecutor as Pool
 from multiprocessing import Process, sharedctypes
 import numpy as np
-import z5py
 
 logging.basicConfig(level=logging.DEBUG)
 
-def relabel_in_block(block, segmentation_ds, fragments_map, ignore=[0]):
+def relabel_in_block(block, segmentation_ds, fragments_ds, fragments_map, ignore=[0]):
     logging.debug("Relabeling in {0}".format(block.read_roi))
-    volume = segmentation_ds[block.read_roi].to_ndarray()
+    volume = fragments_ds[block.read_roi].to_ndarray()
     fragments = np.unique(volume)
-    fragments = fragments[np.isin(fragments, ignore, invert=True)]
+    # fragments = fragments[np.isin(fragments, ignore, invert=True)]
 
     # shift fragment values to potentially save memory when relabeling
     if len(fragments) > 0:
         min_fragment = fragments.min()
-        assert min_fragment > 0
-        offset = fragments.dtype.type(min_fragment - 1)
-        volume[np.isin(volume, ignore, invert=True)] -= offset
+        offset = 0
+        if min_fragment > 0:
+            offset = fragments.dtype.type(min_fragment - 1)
+        # volume[np.isin(volume, ignore, invert=True)] -= offset
+        volume -= offset
         shifted_fragments = fragments - offset
 
         components = np.array([fragments_map[fragment] for fragment in fragments], dtype=fragments.dtype)
@@ -36,11 +37,12 @@ def relabel_in_block(block, segmentation_ds, fragments_map, ignore=[0]):
 
 def parallel_relabel(
         components,
-        fragments,
+        fragments_file,
+        fragments_dataset,
         total_roi,
         block_size,
-        tmp_fname,
-        tmp_dsname,
+        seg_file,
+        seg_dataset,
         num_workers,
         retry):
     
@@ -48,10 +50,8 @@ def parallel_relabel(
     write_roi = daisy.Roi((0,)*3, block_size)
     
     logging.info("Constructing temporary segmentation dataset")
-    if os.path.isdir(os.path.join(tmp_fname, tmp_dsname)):
-        shutil.rmtree(os.path.join(tmp_fname, tmp_dsname))
-    shutil.copytree(fragments.data.path, os.path.join(tmp_fname, tmp_dsname))
-    segmentation_ds = daisy.open_ds(tmp_fname, tmp_dsname)
+    fragments_ds = daisy.open_ds(fragments_file, fragments_dataset)
+    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=np.uint32)
 
     logging.info("Constructing dictionary from fragments to components")
     fragments_map = {fragment: i+1 for i, component in enumerate(components) for fragment in component}
@@ -65,6 +65,7 @@ def parallel_relabel(
             lambda b: relabel_in_block(
                 b,
                 segmentation_ds,
+                fragments_ds,
                 fragments_map),
             fit='shrink',
             num_workers=num_workers,
