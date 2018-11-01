@@ -6,7 +6,6 @@ import os
 import logging
 import numpy as np
 from pymongo import MongoClient
-import z5py
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -14,6 +13,7 @@ def read_graph_in_block(block, rag_provider, shared_node_list, shared_edge_list)
     print('connecting...')
     rag_provider._MongoDbRagProvider__connect()
     rag_provider._MongoDbRagProvider__open_db()
+    rag_provider._MongoDbRagProvider__open_collections()
     nodes = rag_provider._MongoDbRagProvider__read_nodes(block.read_roi)
     node_list = [
             (n['id'], rag_provider._MongoDbRagProvider__remove_keys(n, ['id']))
@@ -40,31 +40,20 @@ def read_graph_in_block(block, rag_provider, shared_node_list, shared_edge_list)
     print("edges: {0}".format(len(edge_list)))
 
 def parallel_read_rag(
-        experiment,
-        setup,
-        iteration,
-        sample,
+        fragments_file,
+        fragments_dataset,
         db_host,
         db_name,
+        edges_collection,
         block_size,
         num_workers,
         retry):
-    
-    experiment_dir = '../' + experiment
-    predict_dir = os.path.join(
-            experiment_dir,
-            '03_predict',
-            setup,
-            str(iteration))
 
-    predict_file = os.path.join(predict_dir, sample)
-
-    fragments = daisy.open_ds(predict_file, 'volumes/fragments')
+    fragments = daisy.open_ds(fragments_file, fragments_dataset)
     total_roi = fragments.roi.copy()
-    block_size = (8192, 8192, 8192)
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
-    rag_provider = lsd.persistence.MongoDbRagProvider(db_name=db_name, host=db_host, mode='r')
+    rag_provider = lsd.persistence.MongoDbRagProvider(db_name=db_name, host=db_host, mode='r', edges_collection=edges_collection)
     node_list = multiprocessing.Manager().list()
     edge_list = multiprocessing.Manager().list()
 
