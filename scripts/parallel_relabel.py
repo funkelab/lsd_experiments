@@ -12,7 +12,7 @@ import numpy as np
 logging.basicConfig(level=logging.DEBUG)
 
 def relabel_in_block(block, segmentation_ds, fragments_ds, fragments_map, ignore=[0]):
-    logging.debug("Relabeling in {0}".format(block.read_roi))
+    logging.info("Relabeling in {0}".format(block.read_roi))
     volume = fragments_ds[block.read_roi].to_ndarray()
     fragments = np.unique(volume)
     # fragments = fragments[np.isin(fragments, ignore, invert=True)]
@@ -48,10 +48,11 @@ def parallel_relabel(
     
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
+    fragments_ds = daisy.open_ds(fragments_file, fragments_dataset)
     
     logging.info("Constructing temporary segmentation dataset")
-    fragments_ds = daisy.open_ds(fragments_file, fragments_dataset)
-    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=np.uint32)
+    chunk_roi = daisy.Roi((0,)*fragments_ds.roi.dims(), (2048,)*fragments_ds.roi.dims())
+    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=np.uint32, write_roi=chunk_roi)
 
     logging.info("Constructing dictionary from fragments to components")
     fragments_map = {fragment: i+1 for i, component in enumerate(components) for fragment in component}
