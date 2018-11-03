@@ -69,20 +69,18 @@ def evaluate(
     renumbered_gt_dataset = 'volumes/labels/renumbered_neuron_ids'
 
     if not os.path.isdir(os.path.join(fragments_file, renumbered_gt_dataset)):
-        #relabel connected components in common ROI
-        logging.info("Relabelling connected components in GT...")
         gt = gt[common_roi]
         gt.materialize()
+        #relabel connected components in common ROI
+        logging.info("Relabelling connected components in GT...")
         components = gt.data
         dtype = components.dtype
-        simple_neighborhood = malis.mknhood3d()
-        components = label(components, background=0)
+        relabeled_components = label(components)
         logging.info("Done relabeling with skimage")
         # curate GT
-        components[gt.data>np.uint64(-10)] = 0
-        gt.data = components.astype(dtype)
+        gt.data = relabeled_components.astype(dtype)
         chunk_roi = daisy.Roi((0,)*gt.roi.dims(),
-                              (256*gt.roi.dims())*gt.voxel_size)
+                              (2048,)*gt.roi.dims())
         renumbered_gt = daisy.prepare_ds(fragments_file,
                                          renumbered_gt_dataset,
                                          common_roi,
