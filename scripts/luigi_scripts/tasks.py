@@ -103,9 +103,19 @@ class TrainTask(LsdTask):
             self.train_dir(),
             'train_net_checkpoint_%d.meta'%iteration)
 
-class PredictTask(LsdTask):
+class PredictionTask(LsdTask):
 
     sample = luigi.Parameter()
+
+    def prediction_filename(self):
+        if self.sample.endswith('.json'):
+            sample = self.sample.replace('.json', '.n5')
+        else:
+            sample = self.sample
+        return os.path.join(self.predict_dir(), sample)
+
+class PredictTask(PredictionTask):
+
     predict_type = luigi.Parameter() # either 'affs' or 'lsd'
 
     # maximum number of GPU workers for this task
@@ -150,8 +160,8 @@ class PredictTask(LsdTask):
             lsds_file = None
             lsds_dataset = None
 
-        mkdirs(self.output_filename())
-        output_base = self.output_filename() + '_predict'
+        mkdirs(self.prediction_filename())
+        output_base = self.prediction_filename() + '_predict'
         log_out = output_base + '.out'
         log_err = output_base + '.err'
 
@@ -165,7 +175,7 @@ class PredictTask(LsdTask):
                 'raw_dataset': 'volumes/raw',
                 'lsds_file': lsds_file,
                 'lsds_dataset': lsds_dataset,
-                'out_file': self.output_filename(),
+                'out_file': self.prediction_filename(),
                 'out_dataset': 'volumes/' + self.predict_type,
                 'block_size_in_chunks': PredictTask.block_size_in_chunks,
                 'num_workers': PredictTask.workers_per_task
@@ -184,15 +194,11 @@ class PredictTask(LsdTask):
     def input_filename(self):
         return os.path.join(self.input_data_dir(), self.sample)
 
-    def output_filename(self):
-        return os.path.join(self.predict_dir(), self.sample)
-
     def output(self):
-        return N5DatasetTarget(self.output_filename(), 'volumes/' + self.predict_type)
+        return N5DatasetTarget(self.prediction_filename(), 'volumes/' + self.predict_type)
 
-class ExtractFragmentsTask(LsdTask):
+class ExtractFragmentsTask(PredictionTask):
 
-    sample = luigi.Parameter()
     block_size = GenericParameter()
     context = GenericParameter()
     fragments_in_xy = luigi.BoolParameter()
@@ -213,7 +219,7 @@ class ExtractFragmentsTask(LsdTask):
 
     def run(self):
 
-        output_base = self.output_filename() + '_extract'
+        output_base = self.prediction_filename() + '_extract'
         log_out = output_base + '.out'
         log_err = output_base + '.err'
 
@@ -226,9 +232,9 @@ class ExtractFragmentsTask(LsdTask):
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
             json.dump({
-                'affs_file': self.output_filename(),
+                'affs_file': self.prediction_filename(),
                 'affs_dataset': 'volumes/affs',
-                'fragments_file': self.output_filename(),
+                'fragments_file': self.prediction_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'block_size': self.block_size,
                 'context': self.context,
@@ -254,9 +260,6 @@ class ExtractFragmentsTask(LsdTask):
             log_out,
             log_err)
 
-    def output_filename(self):
-        return os.path.join(self.predict_dir(), self.sample)
-
     def output(self):
 
         db_name = get_db_name(
@@ -266,13 +269,12 @@ class ExtractFragmentsTask(LsdTask):
             self.sample)
 
         return [
-                N5DatasetTarget(self.output_filename(), 'volumes/fragments'),
+                N5DatasetTarget(self.prediction_filename(), 'volumes/fragments'),
                 MongoDbCollectionTarget(db_name, db_host, 'nodes')
             ]
 
-class AgglomerateTask(LsdTask):
+class AgglomerateTask(PredictionTask):
 
-    sample = luigi.Parameter()
     block_size = GenericParameter()
     context = GenericParameter()
     fragments_in_xy = luigi.BoolParameter()
@@ -299,7 +301,7 @@ class AgglomerateTask(LsdTask):
     def run(self):
 
         output_base = (
-            self.input_filename() +
+            self.prediction_filename() +
             '_agglomerate_' +
             self.merge_function)
         log_out = output_base + '.out'
@@ -314,9 +316,9 @@ class AgglomerateTask(LsdTask):
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
             json.dump({
-                'affs_file': self.input_filename(),
+                'affs_file': self.prediction_filename(),
                 'affs_dataset': 'volumes/affs',
-                'fragments_file': self.input_filename(),
+                'fragments_file': self.prediction_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'block_size': self.block_size,
                 'context': self.context,
@@ -337,9 +339,6 @@ class AgglomerateTask(LsdTask):
             log_out,
             log_err)
 
-    def input_filename(self):
-        return os.path.join(self.predict_dir(), self.sample)
-
     def output(self):
 
         db_name = get_db_name(
@@ -353,6 +352,82 @@ class AgglomerateTask(LsdTask):
             db_host,
             'edges_' + self.merge_function,
             require_nonempty=True)
+
+class SegmentTask(PredictionTask):
+
+    block_size = GenericParameter()
+    context = GenericParameter()
+    fragments_in_xy = luigi.BoolParameter()
+    epsilon_agglomerate = luigi.FloatParameter()
+    mask_fragments = luigi.BoolParameter()
+    merge_function = luigi.Parameter()
+    threshold = luigi.FloatParameter()
+
+    def requires(self):
+
+        return AgglomerateTask(
+            self.experiment,
+            self.setup,
+            self.iteration,
+            self.sample,
+            self.block_size,
+            self.context,
+            self.fragments_in_xy,
+            self.epsilon_agglomerate,
+            self.mask_fragments,
+            self.merge_function)
+
+    def run(self):
+
+        output_base = (
+            self.prediction_filename() +
+            '_segment_' +
+            self.merge_function +
+            '_%.3f'%self.threshold)
+        log_out = output_base + '.out'
+        log_err = output_base + '.err'
+
+        db_name = get_db_name(
+            self.experiment,
+            self.setup,
+            self.iteration,
+            self.sample)
+
+        config_filename = output_base + '.json'
+        with open(config_filename, 'w') as f:
+            json.dump({
+                'fragments_file': self.prediction_filename(),
+                'fragments_dataset': 'volumes/fragments',
+                'out_file': self.prediction_filename(),
+                'out_dataset': self.segmentation_dataset(),
+                'db_host': db_host,
+                'db_name': db_name,
+                'edges_collection': 'edges_' + self.merge_function,
+                'threshold': self.threshold
+            }, f)
+
+        os.chdir(os.path.join(base_dir, 'scripts'))
+        call([
+                'run_lsf',
+                '-c', '1',
+                '-g', '0',
+                '-d', 'funkey/lsd:v0.6',
+                'python -u 04_extract_segmentation.py ' + config_filename
+            ],
+            log_out,
+            log_err)
+
+    def segmentation_dataset(self):
+        return (
+            'volumes/segmentation_' +
+            self.merge_function +
+            '_%.3f'%self.threshold)
+
+    def output(self):
+
+        return N5DatasetTarget(
+            self.prediction_filename(),
+            self.segmentation_dataset())
 
 class EvaluateTask(LsdTask):
 
@@ -458,6 +533,7 @@ class EvaluateCombinations(luigi.task.WrapperTask):
     # a dictionary containing lists of parameters to evaluate
     parameters = luigi.DictParameter()
     range_keys = luigi.ListParameter()
+    cls = GenericParameter(default=EvaluateTask)
 
     def requires(self):
 
@@ -483,6 +559,6 @@ class EvaluateCombinations(luigi.task.WrapperTask):
             parameters = { k: v for k, v in zip(range_keys, concrete_values) }
             parameters.update(other_values)
 
-            tasks.append(EvaluateTask(**parameters))
+            tasks.append(self.cls(**parameters))
 
         return tasks
