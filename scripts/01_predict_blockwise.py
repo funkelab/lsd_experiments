@@ -13,8 +13,10 @@ def predict_blockwise(
         experiment,
         setup,
         iteration,
-        in_file,
-        in_dataset,
+        raw_file,
+        raw_dataset,
+        lsds_file,
+        lsds_dataset,
         out_file,
         out_dataset,
         block_size_in_chunks,
@@ -35,10 +37,12 @@ def predict_blockwise(
 
             Training iteration to predict from.
 
-        in_file (``string``):
-        in_dataset (``string``):
+        raw_file (``string``):
+        raw_dataset (``string``):
+        lsds_file (``string``):
+        lsds_dataset (``string``):
 
-            Path to the dataset to predict in.
+            Paths to the input datasets. lsds can be None if not needed.
 
         out_file (``string``):
         out_dataset (``string``):
@@ -62,15 +66,15 @@ def predict_blockwise(
 
     setup = os.path.abspath(os.path.join(train_dir, setup))
 
-    in_file = os.path.abspath(in_file)
+    raw_file = os.path.abspath(raw_file)
     out_file = os.path.abspath(out_file)
 
-    print('Input file path: ', in_file)
+    print('Input file path: ', raw_file)
     print('Output file path: ', out_file)
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
-    source = daisy.open_ds(in_file, in_dataset)
+    source = daisy.open_ds(raw_file, raw_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
@@ -132,7 +136,7 @@ def predict_blockwise(
     print("Starting block-wise processing...")
 
     # process block-wise
-    daisy.run_blockwise(
+    succeeded = daisy.run_blockwise(
         input_roi,
         block_read_roi,
         block_write_roi,
@@ -140,8 +144,10 @@ def predict_blockwise(
             experiment,
             setup,
             iteration,
-            in_file,
-            in_dataset,
+            raw_file,
+            raw_dataset,
+            lsds_file,
+            lsds_dataset,
             out_file,
             out_dataset,
             b),
@@ -151,12 +157,17 @@ def predict_blockwise(
         read_write_conflict=False,
         fit='overhang')
 
+    if not succeeded:
+        raise RuntimeError("Prediction failed for (at least) one block")
+
 def predict_in_block(
         experiment,
         setup,
         iteration,
-        in_file,
-        in_dataset,
+        raw_file,
+        raw_dataset,
+        lsds_file,
+        lsds_dataset,
         out_file,
         out_dataset,
         block):
@@ -169,17 +180,19 @@ def predict_in_block(
 
     print("Predicting in %s"%write_roi)
 
-    if in_file.endswith('.json'):
-        with open(in_file, 'r') as f:
+    if raw_file.endswith('.json'):
+        with open(raw_file, 'r') as f:
             spec = json.load(f)
-            in_file = spec['container']
+            raw_file = spec['container']
 
     config = {
         'experiment': experiment,
         'setup': setup,
         'iteration': iteration,
-        'in_file': in_file,
-        'in_dataset': in_dataset,
+        'raw_file': raw_file,
+        'raw_dataset': raw_dataset,
+        'lsds_file': lsds_file,
+        'lsds_dataset': lsds_dataset,
         'read_begin': read_roi.get_begin(),
         'read_size': read_roi.get_shape(),
         'out_file': out_file,

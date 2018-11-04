@@ -115,9 +115,40 @@ class PredictTask(LsdTask):
     block_size_in_chunks = [2, 7, 7]
 
     def requires(self):
-        return TrainTask(self.experiment, self.setup, self.iteration)
+
+        with open(os.path.join(self.train_dir(), 'config.json')) as f:
+            config = json.load(f)
+
+        require = [TrainTask(self.experiment, self.setup, self.iteration)]
+
+        if 'lsd_setup' in config:
+            require.append(
+                PredictTask(
+                    self.experiment,
+                    config['lsd_setup'],
+                    config['lsd_iteration'],
+                    self.sample,
+                    'lsds'))
+
+        return require
 
     def run(self):
+
+        with open(os.path.join(self.train_dir(), 'config.json')) as f:
+            config = json.load(f)
+
+        if 'lsd_setup' in config:
+            predict_lsds_task = PredictTask(
+                    self.experiment,
+                    config['lsd_setup'],
+                    config['lsd_iteration'],
+                    self.sample,
+                    'lsds')
+            lsds_file = predict_lsds_task.output_filename()
+            lsds_dataset = 'volumes/lsds'
+        else:
+            lsds_file = None
+            lsds_dataset = None
 
         mkdirs(self.output_filename())
         output_base = self.output_filename() + '_predict'
@@ -130,8 +161,10 @@ class PredictTask(LsdTask):
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
-                'in_file': self.input_filename(),
-                'in_dataset': 'volumes/raw',
+                'raw_file': self.input_filename(),
+                'raw_dataset': 'volumes/raw',
+                'lsds_file': lsds_file,
+                'lsds_dataset': lsds_dataset,
                 'out_file': self.output_filename(),
                 'out_dataset': 'volumes/' + self.predict_type,
                 'block_size_in_chunks': PredictTask.block_size_in_chunks,
