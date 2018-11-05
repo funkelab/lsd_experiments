@@ -3,7 +3,8 @@ from parallel_read_rag import parallel_read_rag
 from parallel_relabel import parallel_relabel
 from parallel_renumber import parallel_renumber
 from parallel_score import parallel_score
-from skimage.measure import label, regionprops
+from skimage.measure import label
+from skimage.morphology import remove_small_objects
 import daisy
 import json
 import logging
@@ -75,18 +76,17 @@ def evaluate(
         logging.info("Relabelling connected components in GT...")
         components = gt.data
         dtype = components.dtype
-        relabeled_components = label(components)
+        relabeled_components = label(components, connectivity=1)
+        relabeled_components = remove_small_objects(relabeled_components, min_size=2, in_place=True)
+        logging.info("Equivalent to original GT: {}".format(np.all(gt.data == relabeled_components)))
         logging.info("Done relabeling with skimage")
         # curate GT
         gt.data = relabeled_components.astype(dtype)
-        chunk_roi = daisy.Roi((0,)*gt.roi.dims(),
-                              (2048,)*gt.roi.dims())
         renumbered_gt = daisy.prepare_ds(fragments_file,
                                          renumbered_gt_dataset,
                                          common_roi,
                                          gt.voxel_size,
-                                         gt.data.dtype,
-                                         write_roi=chunk_roi)
+                                         gt.data.dtype)
         renumbered_gt[common_roi] = gt.data
         logging.info('Stored relabeled GT connected components')
     
@@ -103,9 +103,9 @@ def evaluate(
         logging.info("Creating segmentation for threshold %f..."%threshold)
         seg_dataset = 'volumes/segmentation_{0:.2f}'.format(threshold)
         seg_components = rag.get_connected_components(threshold)
-        seg_counts_shape = (len(seg_components)+1, 1)
+        seg_counts_shape = (int(10e7), 1)
         gt_seg_counts_shape = (1, int(10e7))
-        contingencies_shape = (len(seg_components)+1, int(10e7))
+        contingencies_shape = (int(10e7), int(10e7))
         
         parallel_relabel(
                 seg_components,
