@@ -51,8 +51,7 @@ def parallel_relabel(
     fragments_ds = daisy.open_ds(fragments_file, fragments_dataset)
     
     logging.info("Constructing temporary segmentation dataset")
-    chunk_roi = daisy.Roi((0,)*fragments_ds.roi.dims(), (2048,)*fragments_ds.roi.dims())
-    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=np.uint32, write_roi=chunk_roi)
+    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=fragments_ds.dtype)
 
     logging.info("Constructing dictionary from fragments to components")
     fragments_map = {fragment: i+1 for i, component in enumerate(components) for fragment in component}
