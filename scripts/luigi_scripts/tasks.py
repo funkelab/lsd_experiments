@@ -106,9 +106,12 @@ class TrainTask(LsdTask):
 class PredictionTask(LsdTask):
 
     sample = luigi.Parameter()
+    predict_file = luigi.Parameter(default=None)
 
     def prediction_filename(self):
-        if self.sample.endswith('.json'):
+        if predict_file is not None:
+            return os.path.realpath(predict_file)
+        elif self.sample.endswith('.json'):
             sample = self.sample.replace('.json', '.n5')
         else:
             sample = self.sample
