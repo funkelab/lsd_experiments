@@ -1,5 +1,7 @@
 import luigi
-import os import itertools import json
+import os
+import itertools
+import json
 from targets import *
 from daisy.processes import call
 
