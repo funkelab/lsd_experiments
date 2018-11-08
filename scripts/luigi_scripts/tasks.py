@@ -57,7 +57,7 @@ class LsdTask(luigi.Task):
             self.setup)
 
     def predict_dir(self):
-        if predict_base is None:
+        if self.predict_base is None:
             return os.path.join(
                 base_dir,
                 self.experiment,
@@ -66,7 +66,7 @@ class LsdTask(luigi.Task):
                 str(self.iteration))
         else:
             return os.path.join(
-                predict_base,
+                self.predict_base,
                 '03_predict',
                 self.setup,
                 str(self.iteration))
@@ -207,8 +207,8 @@ class ExtractFragmentsTask(PredictionTask):
             self.iteration,
             self.sample)
 
-        if mask_file is None:
-            mask_file = os.path.join(self.input_data_dir(), self.sample)
+        if self.mask_file is None:
+            self.mask_file = os.path.join(self.input_data_dir(), self.sample)
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
@@ -463,7 +463,7 @@ class EvaluateTask(LsdTask):
             json.dump({
                 'gt_file': self.gt_filename(),
                 'gt_dataset': 'volumes/labels/neuron_ids',
-                'fragments_file': self.input_filename(),
+                'fragments_file': self.predict_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'border_threshold': self.border_threshold,
                 'db_host': db_host,
