@@ -185,6 +185,7 @@ class ExtractFragmentsTask(PredictionTask):
             self.setup,
             self.iteration,
             self.sample,
+            self.predict_file,
             'affs')
 
     def run(self):
@@ -262,6 +263,7 @@ class AgglomerateTask(PredictionTask):
             self.setup,
             self.iteration,
             self.sample,
+            self.predict_file,
             self.block_size,
             self.context,
             self.fragments_in_xy,
@@ -340,6 +342,7 @@ class SegmentTask(PredictionTask):
             self.setup,
             self.iteration,
             self.sample,
+            self.predict_file,
             self.block_size,
             self.context,
             self.fragments_in_xy,
