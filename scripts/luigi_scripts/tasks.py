@@ -39,7 +39,7 @@ class LsdTask(luigi.Task):
     experiment = luigi.Parameter()
     setup = luigi.Parameter()
     iteration = luigi.IntParameter()
-    predict_path = luigi.Parameter(default=None)
+    predict_base = luigi.Parameter(default=None)
 
     def input_data_dir(self):
         return os.path.join(
@@ -55,7 +55,7 @@ class LsdTask(luigi.Task):
             self.setup)
 
     def predict_dir(self):
-        if predict_path is None:
+        if predict_base is None:
             return os.path.join(
                 base_dir,
                 self.experiment,
@@ -63,7 +63,12 @@ class LsdTask(luigi.Task):
                 self.setup,
                 str(self.iteration))
         else:
-            return os.path.realpath(predict_path)
+            return os.path.join(
+                predict_base,
+                '03_predict',
+                self.setup,
+                str(self.iteration))
+
 
 class TrainTask(LsdTask):
 
@@ -184,7 +189,7 @@ class ExtractFragmentsTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_path,
+            self.predict_base,
             self.sample,
             'affs')
 
@@ -263,7 +268,7 @@ class AgglomerateTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_path,
+            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
@@ -344,7 +349,7 @@ class SegmentTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_path,
+            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
@@ -426,7 +431,7 @@ class EvaluateTask(LsdTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_path,
+            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
