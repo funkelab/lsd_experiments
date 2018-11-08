@@ -154,7 +154,7 @@ class PredictTask(PredictionTask):
                     config['lsd_iteration'],
                     self.sample,
                     'lsds')
-            lsds_file = predict_lsds_task.output_filename()
+            lsds_file = predict_lsds_task.prediction_filename()
             lsds_dataset = 'volumes/lsds'
         else:
             lsds_file = None
