@@ -180,7 +180,7 @@ class ExtractFragmentsTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
+    mask_file = luigi.Parameter(default=None)
 
     # maximum number of workers for this task
     workers_per_task = 4
@@ -206,6 +206,9 @@ class ExtractFragmentsTask(PredictionTask):
             self.setup,
             self.iteration,
             self.sample)
+
+        if mask_file is None:
+            mask_file = os.path.join(self.input_data_dir(), self.sample)
 
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
@@ -258,7 +261,7 @@ class AgglomerateTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
+    mask_file = luigi.Parameter(default=None)
     merge_function = luigi.Parameter()
 
     # maximum number of workers for this task
@@ -341,7 +344,7 @@ class SegmentTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
+    mask_file = luigi.Parameter(default=None)
     merge_function = luigi.Parameter()
     threshold = luigi.FloatParameter()
 
@@ -421,7 +424,7 @@ class EvaluateTask(LsdTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
+    mask_file = luigi.Parameter(default=None)
     merge_function = luigi.Parameter()
     border_threshold = luigi.IntParameter()
     thresholds_minmax = GenericParameter()
@@ -478,7 +481,7 @@ class EvaluateTask(LsdTask):
                 '-c', '1',
                 '-g', '0',
                 '-d', 'funkey/lsd:v0.6',
-                'python -u 05_evaluate.py ' + config_filename
+                'python -u 05_evaluate3d.py ' + config_filename
             ],
             log_out,
             log_err)
