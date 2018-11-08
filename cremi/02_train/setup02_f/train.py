@@ -1,37 +1,21 @@
 from __future__ import print_function
-import os
 import sys
-import logging
 from gunpowder import *
 from gunpowder.tensorflow import *
 from mala.gunpowder import AddLocalShapeDescriptor
 import malis
+import os
 import math
 import json
 import tensorflow as tf
 import numpy as np
 
-logging.basicConfig(level=logging.INFO)
-
 data_dir = '../../01_data/training'
 samples = [
     'sample_A_padded_20160501.aligned.filled.cropped',
     'sample_B_padded_20160501.aligned.filled.cropped',
-    'sample_C_padded_20160501.aligned.filled.cropped.0:90',
+    'sample_C_padded_20160501.aligned.filled.cropped'
 ]
-
-setup_dir = os.path.dirname(os.path.realpath(__file__))
-
-with open(os.path.join(setup_dir, 'train_affs_net.json'), 'r') as f:
-    aff_net_config = json.load(f)
-
-experiment_dir = os.path.join(setup_dir, '..', '..')
-lsd_setup_dir = os.path.realpath(os.path.join(
-    experiment_dir,
-    '02_train',
-    aff_net_config['lsd_setup']))
-
-neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
 def train_until(max_iteration):
 
@@ -42,50 +26,31 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_affs_net.json', 'r') as f:
-        context_config = json.load(f)
-        
-    with open('train_lsd_net.json', 'r') as f:
-        sd_config = json.load(f)
+    with open('train_net_config.json', 'r') as f:
+        config = json.load(f)
 
     raw = ArrayKey('RAW')
-    raw_cropped = ArrayKey('RAW_CROPPED')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     artifacts = ArrayKey('ARTIFACTS')
     artifacts_mask = ArrayKey('ARTIFACTS_MASK')
-    pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     embedding = ArrayKey('PREDICTED_EMBEDDING')
-    affs = ArrayKey('PREDICTED_AFFS')
-    gt_embedding = ArrayKey('GT_EMBEDDING')
-    gt_embedding_scale = ArrayKey('GT_EMBEDDING_SCALE')
-    gt_affs = ArrayKey('GT_AFFINITIES')
-    gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
-    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
-    affs_gradient = ArrayKey('AFFS_GRADIENT')
+    gt = ArrayKey('GT_AFFINITIES')
+    gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
-    voxel_size = Coordinate((40,4,4))
-    sd_input_size = Coordinate(sd_config['input_shape'])*voxel_size
-    context_input_size = Coordinate(context_config['input_shape'])*voxel_size
-    pretrained_lsd_size = Coordinate(context_config['input_shape'])*voxel_size
-    output_size = Coordinate(context_config['output_shape'])*voxel_size
+    voxel_size = Coordinate((40, 4, 4))
+    input_size = Coordinate(config['input_shape'])*voxel_size
+    output_size = Coordinate(config['output_shape'])*voxel_size
 
     request = BatchRequest()
-    request.add(raw, sd_input_size)
-    request.add(raw_cropped, context_input_size)
+    request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(pretrained_lsd, pretrained_lsd_size)
-    request.add(gt_embedding, output_size)
-    request.add(gt_embedding_scale, output_size)
-    request.add(gt_affs, output_size)
-    request.add(gt_affs_mask, output_size)
-    request.add(gt_affs_scale, output_size)
+    request.add(gt, output_size)
+    request.add(gt_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt_embedding],
-        affs: request[gt_affs],
-        affs_gradient: request[gt_affs]
+        embedding: request[gt]
     })
 
     data_sources = tuple(
@@ -93,21 +58,17 @@ def train_until(max_iteration):
             os.path.join(data_dir, sample + '.hdf'),
             datasets = {
                 raw: 'volumes/raw',
-                raw_cropped: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids_notransparency',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
-                raw_cropped: ArraySpec(interpolatable=True),
                 labels: ArraySpec(interpolatable=False),
                 labels_mask: ArraySpec(interpolatable=False)
             }
         ) +
         Normalize(raw) +
-        Normalize(raw_cropped) +
         Pad(raw, None) +
-        Pad(raw_cropped, None) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -140,6 +101,7 @@ def train_until(max_iteration):
         SimpleAugment(transpose_only=[1, 2])
     )
 
+
     train_pipeline = (
         data_sources +
         RandomProvider() +
@@ -153,92 +115,49 @@ def train_until(max_iteration):
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
-        IntensityAugment(raw_cropped, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
         GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddLocalShapeDescriptor(
             labels,
-            gt_embedding,
-            mask=gt_embedding_scale,
+            gt,
+            mask=gt_scale,
             sigma=80,
             downsample=2) +
-        AddAffinities(
-            neighborhood,
-            labels=labels,
-            affinities=gt_affs,
-            labels_mask=labels_mask,
-            affinities_mask=gt_affs_mask) +
-        BalanceLabels(
-            gt_affs,
-            gt_affs_scale,
-            gt_affs_mask) +
         DefectAugment(
             raw,
-            prob_missing=0.03, 
+            prob_missing=0.03,
             prob_low_contrast=0.01,
             prob_artifact=0.03,
             artifact_source=artifact_source,
             artifacts=artifacts,
             artifacts_mask=artifacts_mask,
-            contrast_scale=0.5, 
-            axis=0) +
-        DefectAugment(
-            raw_cropped,
-            prob_missing=0.03, 
-            prob_low_contrast=0.01,
-            prob_artifact=0.03,
-            artifact_source=artifact_source,
-            artifacts=artifacts,
-            artifacts_mask=artifacts_mask,
-            contrast_scale=0.5, 
+            contrast_scale=0.5,
             axis=0) +
         IntensityScaleShift(raw, 2,-1) +
-        IntensityScaleShift(raw_cropped, 2,-1) +
         PreCache(
             cache_size=40,
             num_workers=10) +
-        Predict(
-            checkpoint=os.path.join(
-                lsd_setup_dir,
-                'train_lsd_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
-            graph='train_lsd_net.meta',
-            inputs={
-                sd_config['raw']: raw
-            },
-            outputs={
-                sd_config['embedding']: pretrained_lsd
-            }) +
         Train(
-            'train_affs_net',
-            optimizer=context_config['optimizer'],
-            loss=context_config['loss'],
+            'train_net',
+            optimizer=config['optimizer'],
+            loss=config['loss'],
             inputs={
-                context_config['raw']: raw_cropped,
-                context_config['pretrained_lsd']: pretrained_lsd,
-                context_config['gt_embedding']: gt_embedding,
-                context_config['loss_weights_embedding']: gt_embedding_scale,
-                context_config['gt_affs']: gt_affs,
-                context_config['loss_weights_affs']: gt_affs_scale,
+                config['raw']: raw,
+                config['gt_embedding']: gt,
+                config['embedding_loss_weights']: gt_scale,
             },
             outputs={
-                context_config['embedding']: embedding,
-                context_config['affs']: affs
+                config['embedding']: embedding
             },
-            gradients={
-                context_config['affs']: affs_gradient
-            },
-            summary=context_config['summary'],
+            gradients={},
+            summary=config['summary'],
             log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
-        IntensityScaleShift(raw_cropped, 0.5, 0.5) +
         Snapshot({
-                raw_cropped: 'volumes/raw',
+                raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt_embedding: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
-                gt_affs: 'volumes/labels/gt_affinities',
-                affs: 'volumes/labels/pred_affinities',
-                affs_gradient: 'volumes/affs_gradient'
+                gt: 'volumes/gt_embedding',
+                embedding: 'volumes/pred_embedding',
             },
             dataset_dtypes={
                 labels: np.uint64

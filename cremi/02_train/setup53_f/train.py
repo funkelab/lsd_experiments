@@ -17,19 +17,19 @@ data_dir = '../../01_data/training'
 samples = [
     'sample_A_padded_20160501.aligned.filled.cropped',
     'sample_B_padded_20160501.aligned.filled.cropped',
-    'sample_C_padded_20160501.aligned.filled.cropped.0:90',
+    'sample_C_padded_20160501.aligned.filled.cropped',
 ]
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'train_affs_net.json'), 'r') as f:
-    aff_net_config = json.load(f)
+with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
+    net_config = json.load(f)
 
 experiment_dir = os.path.join(setup_dir, '..', '..')
 lsd_setup_dir = os.path.realpath(os.path.join(
     experiment_dir,
     '02_train',
-    aff_net_config['lsd_setup']))
+    net_config['lsd_setup']))
 
 neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
@@ -42,7 +42,7 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_affs_net.json', 'r') as f:
+    with open('train_net.json', 'r') as f:
         context_config = json.load(f)
         
     with open('train_lsd_net.json', 'r') as f:
@@ -199,7 +199,7 @@ def train_until(max_iteration):
         Predict(
             checkpoint=os.path.join(
                 lsd_setup_dir,
-                'train_lsd_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+                'train_net_checkpoint_%d'%net_config['lsd_iteration']),
             graph='train_lsd_net.meta',
             inputs={
                 sd_config['raw']: raw
@@ -208,7 +208,7 @@ def train_until(max_iteration):
                 sd_config['embedding']: pretrained_lsd
             }) +
         Train(
-            'train_affs_net',
+            'train_net',
             optimizer=context_config['optimizer'],
             loss=context_config['loss'],
             inputs={
@@ -256,6 +256,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)
