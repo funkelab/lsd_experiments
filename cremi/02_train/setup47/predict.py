@@ -9,7 +9,9 @@ import sys
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
+print('setup directory:', setup_dir)
+
+with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
     net_config = json.load(f)
 
 # voxels
@@ -21,6 +23,7 @@ print("Context is %s"%(context,))
 # nm
 voxel_size = Coordinate((40, 4, 4))
 context_nm = context*voxel_size
+
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
@@ -28,58 +31,71 @@ def predict(
         iteration,
         raw_file,
         raw_dataset,
+        lsds_file,
+        lsds_dataset,
         read_roi,
         out_file,
         out_dataset):
 
     raw = ArrayKey('RAW')
+    lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
+
     chunk_request.add(raw, input_size)
+    chunk_request.add(lsds, input_size)
     chunk_request.add(affs, output_size)
 
-    pipeline = ZarrSource(
-            raw_file,
-            datasets = {
-                raw: raw_dataset
-            },
-            array_specs = {
-                raw: ArraySpec(interpolatable=True),
-            }
-        )
+    pipeline = (
+        (
+            ZarrSource(
+                raw_file,
+                datasets = {
+                    raw: raw_dataset
+                },
+                array_specs = {
+                    raw: ArraySpec(interpolatable=True)
+                }
+            ) +
+            Pad(raw, size=None) +
+            Crop(raw, read_roi) +
+            Normalize(raw) +
+            IntensityScaleShift(raw, 2,-1),
 
-    pipeline += Pad(raw, size=None)
-
-    pipeline += Crop(raw, read_roi)
-
-    pipeline += Normalize(raw)
-
-    pipeline += IntensityScaleShift(raw, 2,-1)
-
-    pipeline += Predict(
-            os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            ZarrSource(
+                lsds_file,
+                datasets = {
+                    lsds: lsds_dataset
+                }
+            ) +
+            Pad(lsds, size=None) +
+            Crop(lsds, read_roi)
+        ) +
+        MergeProvider() +
+        Predict(
+            checkpoint=os.path.join(
+                setup_dir,
+                'train_net_checkpoint_%d'%iteration),
+            graph=os.path.join(setup_dir, 'test_net.meta'),
             inputs={
+                net_config['pretrained_lsd']: lsds,
                 net_config['raw']: raw
             },
             outputs={
                 net_config['affs']: affs
-            },
-            graph=os.path.join(setup_dir, 'config.meta')
-        )
-
-    pipeline += IntensityScaleShift(affs, 255, 0)
-
-    pipeline += ZarrWrite(
+            }
+        ) +
+        IntensityScaleShift(affs, 255, 0) +
+        ZarrWrite(
             dataset_names={
                 affs: out_dataset,
             },
             output_filename=out_file
-        )
-
-    pipeline += PrintProfilingStats(every=10)
-
-    pipeline += Scan(chunk_request, num_workers=10)
+        ) +
+        PrintProfilingStats(every=10) +
+        Scan(chunk_request, num_workers=10)
+    )
 
     print("Starting prediction...")
     with build(pipeline):
@@ -107,6 +123,8 @@ if __name__ == "__main__":
         run_config['iteration'],
         run_config['raw_file'],
         run_config['raw_dataset'],
+        run_config['lsds_file'],
+        run_config['lsds_dataset'],
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])

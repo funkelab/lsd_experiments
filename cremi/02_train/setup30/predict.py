@@ -6,14 +6,16 @@ import logging
 import numpy as np
 import os
 import sys
+import z5py
+import h5py
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
 print('setup directory:', setup_dir)
 
-with open(os.path.join(setup_dir, 'test_affs_net.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
     aff_net_config = json.load(f)
-with open(os.path.join(setup_dir, 'test_lsd_net.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'lsd_net_config.json'), 'r') as f:
     lsd_net_config = json.load(f)
 
 experiment_dir = os.path.join(setup_dir, '..', '..')
@@ -58,7 +60,7 @@ def predict(
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        ZarrSource(
+        N5Source(
             in_file,
             datasets = {
                 raw: raw_dataset
@@ -75,7 +77,7 @@ def predict(
             checkpoint=os.path.join(
                 lsd_setup_dir,
                 'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
-            graph=os.path.join(setup_dir, 'test_lsd_net.meta'),
+            graph=os.path.join(setup_dir, 'lsd_net.meta'),
             inputs={
                 lsd_net_config['raw']: raw
             },
@@ -94,7 +96,7 @@ def predict(
                 aff_net_config['affs']: affs
             }
         ) +
-        ZarrWrite(
+        N5Write(
             dataset_names={
                 affs: out_dataset,
             },
@@ -104,12 +106,13 @@ def predict(
         Scan(chunk_request, num_workers=1)
         )
 
-    print("Starting prediction...")
     with build(pipeline):
         pipeline.request_batch(BatchRequest())
     print("Prediction finished")
 
 if __name__ == "__main__":
+
+    if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
@@ -128,10 +131,26 @@ if __name__ == "__main__":
     print("Read ROI in nm is %s"%read_roi)
     print("Write ROI in nm is %s"%write_roi)
 
+    '''f = z5py.File(out_file, use_zarr_format=False, mode='w')
+    if out_dataset not in f:
+        ds = f.create_dataset(
+            out_dataset,
+            shape=(3,) + (write_roi//voxel_size).get_shape(),
+            chunks=(3,) + output_shape,
+            compression='gzip',
+            dtype=np.float32)
+        ds.attrs['resolution'] = voxel_size[::-1]
+        ds.attrs['offset'] = write_roi.get_begin()[::-1]'''
+
+    if 'raw_dataset' in run_config:
+        raw_dataset = run_config['raw_dataset']
+    else:
+        raw_dataset = 'volumes/raw'
+
     predict(
         run_config['iteration'],
         run_config['in_file'],
-        run_config['in_dataset'],
+        raw_dataset,
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])

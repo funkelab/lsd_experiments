@@ -9,19 +9,35 @@ import sys
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
-    net_config = json.load(f)
+print('setup directory:', setup_dir)
+
+with open(os.path.join(setup_dir, 'test_affs_net.json'), 'r') as f:
+    aff_net_config = json.load(f)
+with open(os.path.join(setup_dir, 'test_lsd_net.json'), 'r') as f:
+    lsd_net_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+lsd_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    aff_net_config['lsd_setup']))
 
 # voxels
-input_shape = Coordinate(net_config['input_shape'])
-output_shape = Coordinate(net_config['output_shape'])
-context = (input_shape - output_shape)//2
+lsd_input_shape = Coordinate(lsd_net_config['input_shape'])
+context_input_shape = Coordinate(aff_net_config['input_shape'])
+
+output_shape = Coordinate(aff_net_config['output_shape'])
+
+context = (lsd_input_shape - output_shape)//2
 print("Context is %s"%(context,))
 
 # nm
 voxel_size = Coordinate((40, 4, 4))
 context_nm = context*voxel_size
-input_size = input_shape*voxel_size
+
+lsd_input_size = lsd_input_shape*voxel_size
+context_input_size = context_input_shape*voxel_size
+
 output_size = output_shape*voxel_size
 
 def predict(
@@ -32,11 +48,15 @@ def predict(
         out_file,
         out_dataset):
 
+
     raw = ArrayKey('RAW')
+    pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
-    chunk_request.add(raw, input_size)
+
+    chunk_request.add(raw, lsd_input_size)
+    chunk_request.add(pretrained_lsd, context_input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
@@ -46,7 +66,7 @@ def predict(
                 raw: raw_dataset
             },
             array_specs = {
-                raw: ArraySpec(interpolatable=True),
+                raw: ArraySpec(interpolatable=True)
             }
         ) +
         Pad(raw, size=None) +
@@ -54,14 +74,29 @@ def predict(
         Normalize(raw) +
         IntensityScaleShift(raw, 2,-1) +
         Predict(
-            os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            checkpoint=os.path.join(
+                lsd_setup_dir,
+                'train_lsd_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph=os.path.join(setup_dir, 'test_lsd_net.meta'),
             inputs={
-                net_config['raw']: raw
+                lsd_net_config['raw']: raw
             },
             outputs={
-                net_config['affs']: affs
+                lsd_net_config['embedding']: pretrained_lsd
+            }
+        ) +
+        Predict(
+            checkpoint=os.path.join(
+                setup_dir,
+                'train_affs_net_checkpoint_%d'%iteration),
+            graph=os.path.join(setup_dir, 'test_affs_net.meta'),
+            inputs={
+                aff_net_config['pretrained_lsd']: pretrained_lsd,
+                aff_net_config['raw']: raw
             },
-            graph=os.path.join(setup_dir, 'config.meta')
+            outputs={
+                aff_net_config['affs']: affs
+            }
         ) +
         IntensityScaleShift(affs, 255, 0) +
         ZarrWrite(
@@ -71,8 +106,8 @@ def predict(
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
-    )
+        Scan(chunk_request, num_workers=1)
+        )
 
     print("Starting prediction...")
     with build(pipeline):

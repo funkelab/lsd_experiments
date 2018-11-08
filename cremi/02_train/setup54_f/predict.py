@@ -12,58 +12,93 @@ setup_dir = os.path.dirname(os.path.realpath(__file__))
 print('setup directory:', setup_dir)
 
 with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
-    net_config = json.load(f)
+    aff_net_config = json.load(f)
+with open(os.path.join(setup_dir, 'test_lsd_net.json'), 'r') as f:
+    lsd_net_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+lsd_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    aff_net_config['lsd_setup']))
 
 # voxels
-input_shape = Coordinate(net_config['input_shape'])
-output_shape = Coordinate(net_config['output_shape'])
-context = (input_shape - output_shape)//2
+lsd_input_shape = Coordinate(lsd_net_config['input_shape'])
+context_input_shape = Coordinate(aff_net_config['input_shape'])
+
+output_shape = Coordinate(aff_net_config['output_shape'])
+
+context = (lsd_input_shape - output_shape)//2
 print("Context is %s"%(context,))
 
 # nm
 voxel_size = Coordinate((40, 4, 4))
 context_nm = context*voxel_size
 
-input_size = input_shape*voxel_size
+lsd_input_size = lsd_input_shape*voxel_size
+context_input_size = context_input_shape*voxel_size
+
 output_size = output_shape*voxel_size
 
 def predict(
         iteration,
-        lsds_file,
-        lsds_dataset
+        in_file,
+        raw_dataset,
         read_roi,
         out_file,
         out_dataset):
 
-    lsds = ArrayKey('LSDS')
+
+    raw = ArrayKey('RAW')
+    pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
 
-    chunk_request.add(lsds, input_size)
+    chunk_request.add(raw, lsd_input_size)
+    chunk_request.add(pretrained_lsd, context_input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
         ZarrSource(
-            lsds_file,
+            in_file,
             datasets = {
-                lsds: lsds_dataset
+                raw: raw_dataset
+            },
+            array_specs = {
+                raw: ArraySpec(interpolatable=True)
             }
         ) +
-        Pad(lsds, size=None) +
-        Crop(lsds, read_roi) +
+        Pad(raw, size=None) +
+        Crop(raw, read_roi) +
+        Normalize(raw) +
+        IntensityScaleShift(raw, 2,-1) +
+        Predict(
+            checkpoint=os.path.join(
+                lsd_setup_dir,
+                'train_lsd_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph=os.path.join(setup_dir, 'test_lsd_net.meta'),
+            inputs={
+                lsd_net_config['raw']: raw
+            },
+            outputs={
+                lsd_net_config['embedding']: pretrained_lsd
+            }
+        ) +
         Predict(
             checkpoint=os.path.join(
                 setup_dir,
                 'train_net_checkpoint_%d'%iteration),
             graph=os.path.join(setup_dir, 'test_net.meta'),
             inputs={
-                net_config['embedding']: lsds
+                aff_net_config['pretrained_lsd']: pretrained_lsd,
+                aff_net_config['raw']: raw
             },
             outputs={
-                net_config['affs']: affs
+                aff_net_config['direct_neighbor_affs']: affs
             }
         ) +
+        IntensityScaleShift(affs, 255, 0) +
         ZarrWrite(
             dataset_names={
                 affs: out_dataset,
@@ -83,8 +118,6 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('gunpowder.nodes.hdf5like_write_base').setLevel(logging.DEBUG)
-    logging.getLogger('gunpowder.nodes.n5_write').setLevel(logging.DEBUG)
-    logging.getLogger('gunpowder.nodes.n5_source').setLevel(logging.DEBUG)
 
     config_file = sys.argv[1]
     with open(config_file, 'r') as f:
@@ -100,8 +133,8 @@ if __name__ == "__main__":
 
     predict(
         run_config['iteration'],
-        run_config['lsds_file'],
-        run_config['lsds_dataset'],
+        run_config['in_file'],
+        run_config['in_dataset'],
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])

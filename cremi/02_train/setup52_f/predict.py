@@ -26,7 +26,7 @@ output_size = output_shape*voxel_size
 
 def predict(
         iteration,
-        raw_file,
+        in_file,
         raw_dataset,
         read_roi,
         out_file,
@@ -39,47 +39,40 @@ def predict(
     chunk_request.add(raw, input_size)
     chunk_request.add(affs, output_size)
 
-    pipeline = ZarrSource(
-            raw_file,
+    pipeline = (
+        ZarrSource(
+            in_file,
             datasets = {
                 raw: raw_dataset
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
             }
-        )
-
-    pipeline += Pad(raw, size=None)
-
-    pipeline += Crop(raw, read_roi)
-
-    pipeline += Normalize(raw)
-
-    pipeline += IntensityScaleShift(raw, 2,-1)
-
-    pipeline += Predict(
+        ) +
+        Pad(raw, size=None) +
+        Crop(raw, read_roi) +
+        Normalize(raw) +
+        IntensityScaleShift(raw, 2,-1) +
+        Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
             inputs={
                 net_config['raw']: raw
             },
             outputs={
-                net_config['affs']: affs
+                net_config['direct_neighbor_affs']: affs
             },
             graph=os.path.join(setup_dir, 'config.meta')
-        )
-
-    pipeline += IntensityScaleShift(affs, 255, 0)
-
-    pipeline += ZarrWrite(
+        ) +
+        IntensityScaleShift(affs, 255, 0) +
+        ZarrWrite(
             dataset_names={
                 affs: out_dataset,
             },
             output_filename=out_file
-        )
-
-    pipeline += PrintProfilingStats(every=10)
-
-    pipeline += Scan(chunk_request, num_workers=10)
+        ) +
+        PrintProfilingStats(every=10) +
+        Scan(chunk_request, num_workers=10)
+    )
 
     print("Starting prediction...")
     with build(pipeline):
@@ -105,8 +98,8 @@ if __name__ == "__main__":
 
     predict(
         run_config['iteration'],
-        run_config['raw_file'],
-        run_config['raw_dataset'],
+        run_config['in_file'],
+        run_config['in_dataset'],
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])
