@@ -29,7 +29,7 @@ def create_network(input_shape, name):
     affs_batched, _ = mala.networks.conv_pass(
         unet,
         kernel_sizes=[1],
-        num_fmaps=12,
+        num_fmaps=3,
         activation='sigmoid',
         name='affs')
 
@@ -45,7 +45,7 @@ def create_network(input_shape, name):
         affs,
         affs_loss_weights)
 
-    summary = tf.summary.scalar('setup23_euc_loss', loss)
+    summary = tf.summary.scalar('setup05_eucl_loss', loss)
 
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
@@ -76,8 +76,8 @@ def create_network(input_shape, name):
 
 if __name__ == "__main__":
 
-    z=0
-    xy=0
+    z=3
+    xy=27
 
     create_network((84, 268, 268), 'train_net_config')
     create_network((96+z, 484+xy, 484+xy), 'config')
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     with open('config.json', 'r') as f:
         config = json.load(f)
     config.update({
-        'out_dims': 12,
+        'out_dims': 3,
         'out_dtype': 'uint8'
     })
     with open('config.json', 'w') as f:

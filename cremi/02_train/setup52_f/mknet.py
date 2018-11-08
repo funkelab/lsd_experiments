@@ -9,7 +9,7 @@ def create_network(input_shape, name):
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[1,3,3],[1,3,3],[3,3,3]])
+    unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]], num_fmaps_out=24)
 
     embedding_batched, _ = mala.networks.conv_pass(
         unet,
@@ -22,17 +22,18 @@ def create_network(input_shape, name):
     affs_batched, _ = mala.networks.conv_pass(
         unet,
         kernel_sizes=[1],
-        num_fmaps=3,
+        num_fmaps=12,
         activation='sigmoid',
         name='affs')
     affs = tf.squeeze(affs_batched, axis=0)
+    direct_neighbor_affs = affs[0:3]
 
     output_shape = tuple(affs.get_shape().as_list()[1:])
 
     gt_embedding = tf.placeholder(tf.float32, shape=(10,) + output_shape)
-    gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
+    gt_affs = tf.placeholder(tf.float32, shape=(12,) + output_shape)
     loss_weights_embedding = tf.placeholder(tf.float32, shape=(10,) + output_shape)
-    loss_weights_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
+    loss_weights_affs = tf.placeholder(tf.float32, shape=(12,) + output_shape)
 
     loss_embedding = tf.losses.mean_squared_error(
         gt_embedding,
@@ -44,7 +45,7 @@ def create_network(input_shape, name):
         loss_weights_affs)
     loss = loss_embedding + loss_affs
 
-    summary = tf.summary.scalar('setup12_eucl_loss', loss)
+    summary = tf.summary.scalar('setup52_eucl_loss', loss)
 
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
@@ -62,6 +63,7 @@ def create_network(input_shape, name):
         'raw': raw.name,
         'embedding': embedding.name,
         'affs': affs.name,
+        'direct_neighbor_affs': direct_neighbor_affs.name,
         'gt_embedding': gt_embedding.name,
         'gt_affs': gt_affs.name,
         'loss_weights_embedding': loss_weights_embedding.name,
@@ -80,9 +82,9 @@ if __name__ == "__main__":
     z=0
     xy=0
 
-    create_network((84, 268, 268), 'train_net_config')
+    create_network((84, 268, 268), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
-
+    
     with open('config.json', 'r') as f:
         config = json.load(f)
     config.update({

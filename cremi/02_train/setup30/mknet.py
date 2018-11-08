@@ -12,22 +12,7 @@ def create_lsd_network(input_shape, output_shape, name, scope):
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-        unet, _, _ = mala.networks.unet(
-            raw_batched,
-            12, 6,
-            [[1, 3, 3], [1, 3, 3], [3, 3, 3]],
-            [
-                [(1, 3, 3), (1, 3, 3)],
-                [(1, 3, 3), (1, 3, 3)],
-                [(3, 3, 3), (3, 3, 3)],
-                [(3, 3, 3), (3, 3, 3)]
-            ],
-            [
-                [(1, 3, 3), (1, 3, 3)],
-                [(1, 3, 3), (1, 3, 3)],
-                [(3, 3, 3), (3, 3, 3)],
-                [(3, 3, 3), (3, 3, 3)]
-            ])
+        unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
 
         embedding_batched, _ = mala.networks.conv_pass(
             unet,
@@ -59,22 +44,7 @@ def create_affs_network(input_shape, name):
     embedding = tf.placeholder(tf.float32, shape=(10,) + input_shape)
     embedding_batched = tf.reshape(embedding, (1, 10) + input_shape)
 
-    unet, _, _ = mala.networks.unet(
-        embedding_batched,
-        12, 6,
-        [[1, 3, 3], [1, 3, 3], [3, 3, 3]],
-        [
-            [(1, 3, 3), (1, 3, 3)],
-            [(1, 3, 3), (1, 3, 3)],
-            [(3, 3, 3), (3, 3, 3)],
-            [(3, 3, 3), (3, 3, 3)]
-        ],
-        [
-            [(1, 3, 3), (1, 3, 3)],
-            [(1, 3, 3), (1, 3, 3)],
-            [(3, 3, 3), (3, 3, 3)],
-            [(3, 3, 3), (3, 3, 3)]
-        ])
+    unet, _, _ = mala.networks.unet(embedding_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
 
     affs_batched, _ = mala.networks.conv_pass(
         unet,
@@ -95,7 +65,7 @@ def create_affs_network(input_shape, name):
         affs,
         affs_loss_weights)
 
-    summary = tf.summary.scalar('setup07_eucl_loss', loss)
+    summary = tf.summary.scalar('setup03_eucl_loss', loss)
 
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
@@ -120,7 +90,7 @@ def create_affs_network(input_shape, name):
         'input_shape': input_shape,
         'output_shape': output_shape,
         'summary': summary.name,
-        'lsd_setup': "setup06",
+        'lsd_setup': "setup02",
         'lsd_iteration': 400000
         }
     with open(name + '_config.json', 'w') as f:
@@ -131,19 +101,17 @@ def create_config(input_shape, output_shape, num_dims, name):
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims,
-        'out_dtype': 'uint8'
+        'out_dims': num_dims
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
-    create_lsd_network((120, 484, 484), (84, 268, 268), 'train_lsd_net', 'setup06')
-    create_lsd_network((120, 484, 484), (84, 268, 268), 'test_lsd_net', 'setup06')
+    create_lsd_network((120, 484, 484), (84, 268, 268), 'lsd_net', 'setup02')
     
-    create_affs_network((84, 268, 268), 'train_affs_net')
-    create_affs_network((84, 268, 268), 'test_affs_net')
+    create_affs_network((84, 268, 268), 'train_net')
+    create_affs_network((84, 268, 268), 'affs_net')
     
-    create_config((120, 484, 484), (48, 56, 56), 3, 'config')
+    create_config((120, 484, 484), (48, 56, 56), 12, 'config')
 

@@ -53,7 +53,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
 
     concat_input = tf.concat([raw_batched, pretrained_lsd_batched], axis=1)
 
-    unet, _, _ = mala.networks.unet(concat_input, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
+    unet, _, _ = mala.networks.unet(concat_input, 12, 5, [[1,3,3],[1,3,3],[3,3,3]], num_fmaps_out=24)
 
     embedding_batched, _ = mala.networks.conv_pass(
         unet,
@@ -70,6 +70,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         activation='sigmoid',
         name='affs')
     affs = tf.squeeze(affs_batched, axis=0)
+    direct_neighbor_affs = affs[0:3]
 
     output_shape = tuple(affs.get_shape().as_list()[1:])
     assert expected_output_shape == output_shape, "%s != %s"%(expected_output_shape, output_shape)
@@ -89,7 +90,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         loss_weights_affs)
     loss = loss_embedding + loss_affs
 
-    summary = tf.summary.scalar('setup46_eucl_loss', loss)
+    summary = tf.summary.scalar('setup54_eucl_loss', loss)
 
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
@@ -110,6 +111,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         'pretrained_lsd': pretrained_lsd.name,
         'embedding': embedding.name,
         'affs': affs.name,
+        'direct_neighbor_affs': direct_neighbor_affs.name,
         'gt_embedding': gt_embedding.name,
         'gt_affs': gt_affs.name,
         'loss_weights_embedding': loss_weights_embedding.name,
@@ -118,9 +120,7 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         'optimizer': optimizer.name,
         'input_shape': intermediate_shape,
         'output_shape': output_shape,
-        'summary': summary.name,
-        'lsd_setup': "setup02",
-        'lsd_iteration': 400000
+        'summary': summary.name
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
@@ -130,8 +130,11 @@ def create_config(input_shape, output_shape, num_dims, name):
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims
-        }
+        'out_dims': num_dims,
+        'out_dtype': 'uint8',
+        'lsd_setup': "setup02",
+        'lsd_iteration': 400000
+    }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
@@ -141,21 +144,13 @@ if __name__ == "__main__":
     train_intermediate_shape = (84, 268, 268)
     train_output_shape = (48, 56, 56)
     create_lsd_network(train_input_shape, train_intermediate_shape, 'train_lsd_net', 'setup02')
-    create_affs_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_affs_net')
+    create_affs_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_net')
     
     o = 135
     test_input_shape = (120, 484+o, 484+o)
     test_intermediate_shape = (84, 268+o, 268+o)
     test_output_shape = (48, 56+o, 56+o)
     create_lsd_network(test_input_shape, test_intermediate_shape, 'test_lsd_net', 'setup02')
-    create_affs_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_affs_net')
+    create_affs_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_net')
 
-    create_config(test_input_shape, test_output_shape, 12, 'config')
-
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-    config.update({
-        'out_dtype': 'uint8'
-    })
-    with open('config.json', 'w') as f:
-        json.dump(config, f)
+    create_config(test_input_shape, test_output_shape, 3, 'config')
