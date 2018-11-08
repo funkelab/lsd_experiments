@@ -422,6 +422,7 @@ class EvaluateTask(LsdTask):
             self.experiment,
             self.setup,
             self.iteration,
+            self.predict_path,
             self.sample,
             self.block_size,
             self.context,
