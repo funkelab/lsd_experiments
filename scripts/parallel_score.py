@@ -29,7 +29,7 @@ def contingencies_in_block(
     gt_seg_in_block = gt_seg[block.read_roi].to_ndarray()
     seg_indices = np.ravel(seg_in_block)
     gt_seg_indices = np.ravel(gt_seg_in_block)
-    ignored = np.logical_or(np.isin(seg_indices, ignore), np.isin(gt_seg_indices, ignore))
+    ignored = np.isin(gt_seg_indices, ignore)
     data = np.ones(seg_indices.shape)
     data[ignored] = 0
     partial_contingencies = sparse.coo_matrix(
