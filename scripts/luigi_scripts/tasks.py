@@ -1,7 +1,5 @@
 import luigi
-import os
-import itertools
-import json
+import os import itertools import json
 from targets import *
 from daisy.processes import call
 
@@ -175,6 +173,7 @@ class ExtractFragmentsTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
 
     # maximum number of workers for this task
     workers_per_task = 4
@@ -216,7 +215,7 @@ class ExtractFragmentsTask(PredictionTask):
                 'fragments_in_xy': self.fragments_in_xy,
                 'epsilon_agglomerate': self.epsilon_agglomerate,
                 'mask_fragments': self.mask_fragments,
-                'mask_file': os.path.join(self.input_data_dir(), self.sample),
+                'mask_file': self.mask_file,
                 'mask_dataset': 'volumes/labels/mask'
             }, f)
 
@@ -252,6 +251,7 @@ class AgglomerateTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
     merge_function = luigi.Parameter()
 
     # maximum number of workers for this task
@@ -269,7 +269,8 @@ class AgglomerateTask(PredictionTask):
             self.context,
             self.fragments_in_xy,
             self.epsilon_agglomerate,
-            self.mask_fragments)
+            self.mask_fragments,
+            self.mask_file)
 
     def run(self):
 
@@ -333,6 +334,7 @@ class SegmentTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
     merge_function = luigi.Parameter()
     threshold = luigi.FloatParameter()
 
@@ -349,6 +351,7 @@ class SegmentTask(PredictionTask):
             self.fragments_in_xy,
             self.epsilon_agglomerate,
             self.mask_fragments,
+            self.mask_file,
             self.merge_function)
 
     def run(self):
@@ -411,6 +414,7 @@ class EvaluateTask(LsdTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_file = luigi.Parameter(default=os.path.join(self.input_data_dir(), self.sample))
     merge_function = luigi.Parameter()
     border_threshold = luigi.IntParameter()
     thresholds_minmax = GenericParameter()
@@ -429,6 +433,7 @@ class EvaluateTask(LsdTask):
             self.fragments_in_xy,
             self.epsilon_agglomerate,
             self.mask_fragments,
+            self.mask_file,
             self.merge_function)
 
     def run(self):
