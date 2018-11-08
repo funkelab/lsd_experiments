@@ -41,6 +41,7 @@ class LsdTask(luigi.Task):
     experiment = luigi.Parameter()
     setup = luigi.Parameter()
     iteration = luigi.IntParameter()
+    predict_path = luigi.Parameter(default=None)
 
     def input_data_dir(self):
         return os.path.join(
@@ -56,12 +57,15 @@ class LsdTask(luigi.Task):
             self.setup)
 
     def predict_dir(self):
-        return os.path.join(
-            base_dir,
-            self.experiment,
-            '03_predict',
-            self.setup,
-            str(self.iteration))
+        if predict_path is None:
+            return os.path.join(
+                base_dir,
+                self.experiment,
+                '03_predict',
+                self.setup,
+                str(self.iteration))
+        else:
+            return os.path.realpath(predict_path)
 
 class TrainTask(LsdTask):
 
@@ -106,12 +110,9 @@ class TrainTask(LsdTask):
 class PredictionTask(LsdTask):
 
     sample = luigi.Parameter()
-    predict_file = luigi.Parameter(default=None)
 
     def prediction_filename(self):
-        if predict_file is not None:
-            return os.path.realpath(predict_file)
-        elif self.sample.endswith('.json'):
+        if self.sample.endswith('.json'):
             sample = self.sample.replace('.json', '.n5')
         else:
             sample = self.sample
@@ -184,8 +185,8 @@ class ExtractFragmentsTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
+            self.predict_path,
             self.sample,
-            self.predict_file,
             'affs')
 
     def run(self):
@@ -262,8 +263,8 @@ class AgglomerateTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
+            self.predict_path,
             self.sample,
-            self.predict_file,
             self.block_size,
             self.context,
             self.fragments_in_xy,
@@ -341,8 +342,8 @@ class SegmentTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
+            self.predict_path,
             self.sample,
-            self.predict_file,
             self.block_size,
             self.context,
             self.fragments_in_xy,
