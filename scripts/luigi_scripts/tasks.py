@@ -416,9 +416,9 @@ class SegmentTask(PredictionTask):
             self.prediction_filename(),
             self.segmentation_dataset())
 
-class EvaluateTask(LsdTask):
+class EvaluateTask(PredictionTask):
 
-    sample = luigi.Parameter()
+    gt_file = luigi.Parameter(default=None) 
     block_size = GenericParameter()
     context = GenericParameter()
     fragments_in_xy = luigi.BoolParameter()
@@ -463,7 +463,7 @@ class EvaluateTask(LsdTask):
             json.dump({
                 'gt_file': self.gt_filename(),
                 'gt_dataset': 'volumes/labels/neuron_ids',
-                'fragments_file': self.predict_filename(),
+                'fragments_file': self.prediction_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'border_threshold': self.border_threshold,
                 'db_host': db_host,
@@ -481,13 +481,16 @@ class EvaluateTask(LsdTask):
                 '-c', '1',
                 '-g', '0',
                 '-d', 'funkey/lsd:v0.6',
-                'python -u 05_evaluate3d.py ' + config_filename
+                'python -u 05_evaluate.py ' + config_filename
             ],
             log_out,
             log_err)
 
     def gt_filename(self):
-        return os.path.join(self.input_data_dir(), self.sample)
+        if self.gt_file is None:
+            return os.path.join(self.input_data_dir(), self.sample)
+        else:
+            return os.path.realpath(self.gt_file)
 
     def input_filename(self):
         return os.path.join(self.predict_dir(), self.sample)
