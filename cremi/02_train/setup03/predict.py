@@ -6,97 +6,65 @@ import logging
 import numpy as np
 import os
 import sys
-import z5py
-import h5py
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
 print('setup directory:', setup_dir)
 
-with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
-    aff_net_config = json.load(f)
-with open(os.path.join(setup_dir, 'lsd_net_config.json'), 'r') as f:
-    lsd_net_config = json.load(f)
-
-experiment_dir = os.path.join(setup_dir, '..', '..')
-lsd_setup_dir = os.path.realpath(os.path.join(
-    experiment_dir,
-    '02_train',
-    aff_net_config['lsd_setup']))
+with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
+    net_config = json.load(f)
 
 # voxels
-input_shape = Coordinate(lsd_net_config['input_shape'])
-lsds_shape = Coordinate(lsd_net_config['output_shape'])
-assert lsds_shape == Coordinate(aff_net_config['input_shape'])
-output_shape = Coordinate(aff_net_config['output_shape'])
-
+input_shape = Coordinate(net_config['input_shape'])
+output_shape = Coordinate(net_config['output_shape'])
 context = (input_shape - output_shape)//2
 print("Context is %s"%(context,))
 
 # nm
 voxel_size = Coordinate((40, 4, 4))
 context_nm = context*voxel_size
+
 input_size = input_shape*voxel_size
-lsds_size = lsds_shape*voxel_size
 output_size = output_shape*voxel_size
 
 def predict(
         iteration,
-        in_file,
-        raw_dataset,
+        lsds_file,
+        lsds_dataset
         read_roi,
         out_file,
         out_dataset):
 
-
-    raw = ArrayKey('RAW')
     lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
 
-    chunk_request.add(raw, input_size)
-    chunk_request.add(lsds, lsds_size)
+    chunk_request.add(lsds, input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        N5Source(
-            in_file,
+        ZarrSource(
+            lsds_file,
             datasets = {
-                raw: raw_dataset
-            },
-            array_specs = {
-                raw: ArraySpec(interpolatable=True),
+                lsds: lsds_dataset
             }
         ) +
-        Pad(raw, size=None) +
-        Crop(raw, read_roi) +
-        Normalize(raw) +
-        IntensityScaleShift(raw, 2,-1) +
-        Predict(
-            checkpoint=os.path.join(
-                lsd_setup_dir,
-                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
-            graph=os.path.join(setup_dir, 'lsd_net.meta'),
-            inputs={
-                lsd_net_config['raw']: raw
-            },
-            outputs={
-                lsd_net_config['embedding']: lsds
-            }
-        ) +
+        Pad(lsds, size=None) +
+        Crop(lsds, read_roi) +
         Predict(
             checkpoint=os.path.join(
                 setup_dir,
                 'train_net_checkpoint_%d'%iteration),
+            graph=os.path.join(setup_dir, 'test_net.meta'),
             inputs={
-                aff_net_config['embedding']: lsds
+                net_config['embedding']: lsds
             },
             outputs={
-                aff_net_config['affs']: affs
+                net_config['affs']: affs
             }
         ) +
-        N5Write(
+        ZarrWrite(
             dataset_names={
                 affs: out_dataset,
             },
@@ -130,26 +98,10 @@ if __name__ == "__main__":
     print("Read ROI in nm is %s"%read_roi)
     print("Write ROI in nm is %s"%write_roi)
 
-    '''f = z5py.File(out_file, use_zarr_format=False, mode='w')
-    if out_dataset not in f:
-        ds = f.create_dataset(
-            out_dataset,
-            shape=(3,) + (write_roi//voxel_size).get_shape(),
-            chunks=(3,) + output_shape,
-            compression='gzip',
-            dtype=np.float32)
-        ds.attrs['resolution'] = voxel_size[::-1]
-        ds.attrs['offset'] = write_roi.get_begin()[::-1]'''
-
-    if 'raw_dataset' in run_config:
-        raw_dataset = run_config['raw_dataset']
-    else:
-        raw_dataset = 'volumes/raw'
-
     predict(
         run_config['iteration'],
-        run_config['in_file'],
-        raw_dataset,
+        run_config['lsds_file'],
+        run_config['lsds_dataset'],
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])

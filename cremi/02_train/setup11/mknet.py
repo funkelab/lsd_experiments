@@ -101,17 +101,19 @@ def create_config(input_shape, output_shape, num_dims, name):
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims
+        'out_dims': num_dims,
+        'out_dtype': 'uint8'
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
-    create_lsd_network((120, 484, 484), (84, 268, 268), 'lsd_net', 'setup10')
+    create_lsd_network((120, 484, 484), (84, 268, 268), 'train_lsd_net', 'setup10')
+    create_lsd_network((120, 484, 484), (84, 268, 268), 'test_lsd_net', 'setup10')
     
-    create_affs_network((84, 268, 268), 'train_net')
-    create_affs_network((84, 268, 268), 'affs_net')
+    create_affs_network((84, 268, 268), 'train_affs_net')
+    create_affs_network((84, 268, 268), 'test_affs_net')
     
     create_config((120, 484, 484), (48, 56, 56), 3, 'config')
 

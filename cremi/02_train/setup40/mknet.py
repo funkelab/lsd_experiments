@@ -43,7 +43,10 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
 
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
+    raw_in = tf.reshape(raw_batched, input_shape)
     raw_batched = crop_zyx(raw_batched, (1, 1) + intermediate_shape)
+
+    raw_cropped = tf.reshape(raw_batched, intermediate_shape)
 
     pretrained_lsd = tf.placeholder(tf.float32, shape=(10,) + intermediate_shape)
     pretrained_lsd_batched = tf.reshape(pretrained_lsd, (1, 10) + intermediate_shape)
@@ -102,6 +105,8 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
 
     config = {
         'raw': raw.name,
+        'raw_cropped': raw_cropped.name,
+        'raw_in': raw_in.name,
         'pretrained_lsd': pretrained_lsd.name,
         'embedding': embedding.name,
         'affs': affs.name,
@@ -114,8 +119,6 @@ def create_affs_network(input_shape, intermediate_shape, expected_output_shape, 
         'input_shape': intermediate_shape,
         'output_shape': output_shape,
         'summary': summary.name,
-        'lsd_setup': "setup02",
-        'lsd_iteration': 400000
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
@@ -125,7 +128,10 @@ def create_config(input_shape, output_shape, num_dims, name):
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims
+        'out_dims': num_dims,
+        'out_dtype': 'uint8',
+        'lsd_setup': 'setup02',
+        'lsd_iteration': 400000
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
@@ -136,12 +142,12 @@ if __name__ == "__main__":
     train_intermediate_shape = (84, 268, 268)
     train_output_shape = (48, 56, 56)
     create_lsd_network(train_input_shape, train_intermediate_shape, 'train_lsd_net', 'setup02')
-    create_affs_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_affs_net')
-
-    test_input_shape = (120, 484, 484)
-    test_intermediate_shape = (84, 268, 268)
-    test_output_shape = (48, 56, 56)
-    create_lsd_network(test_input_shape, test_intermediate_shape, 'test_lsd_net', 'setup02')
-    create_affs_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_affs_net')
+    create_affs_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_net')
+    
+    o = 135
+    test_input_shape = (84, 268+o, 268+o)
+    test_intermediate_shape = (84, 268+o, 268+o)
+    test_output_shape = (48, 56+o, 56+o)
+    create_affs_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_net')
 
     create_config(test_input_shape, test_output_shape, 3, 'config')

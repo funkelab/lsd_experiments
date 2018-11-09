@@ -9,6 +9,9 @@ import json
 import tensorflow as tf
 import numpy as np
 
+
+logging.basicConfig(level=logging.INFO)
+
 data_dir = '../../01_data/training'
 samples = [
     'sample_A_padded_20160501.aligned.filled.cropped',
@@ -211,6 +214,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)

@@ -55,13 +55,25 @@ def create_network(input_shape, name):
         'optimizer': optimizer.name,
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'summary': summary.name,
-        'out_dims': 3}
+        'summary': summary.name
+    }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
+    z=3
+    xy=27
+
     create_network((84, 268, 268), 'train_net_config')
-    create_network((96, 484, 484), 'config')
+    create_network((96+z, 484+xy, 484+xy), 'config')
+
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+    config.update({
+        'out_dims': 3,
+        'out_dtype': 'uint8'
+    })
+    with open('config.json', 'w') as f:
+        json.dump(config, f)
 
