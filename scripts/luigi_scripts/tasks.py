@@ -41,8 +41,7 @@ class LsdTask(luigi.Task):
     experiment = luigi.Parameter()
     setup = luigi.Parameter()
     iteration = luigi.IntParameter()
-    predict_base = luigi.Parameter(default=None)
-
+    predict_base = None
     def input_data_dir(self):
         return os.path.join(
             base_dir,
@@ -57,7 +56,7 @@ class LsdTask(luigi.Task):
             self.setup)
 
     def predict_dir(self):
-        if self.predict_base is None:
+        if LsdTask.predict_base is None:
             return os.path.join(
                 base_dir,
                 self.experiment,
@@ -66,7 +65,7 @@ class LsdTask(luigi.Task):
                 str(self.iteration))
         else:
             return os.path.join(
-                self.predict_base,
+                LsdTask.predict_base,
                 '03_predict',
                 self.setup,
                 str(self.iteration))
@@ -224,7 +223,6 @@ class ExtractFragmentsTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_base,
             self.sample,
             'affs')
 
@@ -306,7 +304,6 @@ class AgglomerateTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
@@ -387,7 +384,6 @@ class SegmentTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
@@ -469,7 +465,6 @@ class EvaluateTask(PredictionTask):
             self.experiment,
             self.setup,
             self.iteration,
-            self.predict_base,
             self.sample,
             self.block_size,
             self.context,
