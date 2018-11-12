@@ -212,7 +212,7 @@ class ExtractFragmentsTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_context = luigi.IntParameter(default=0)
+    mask_context = luigi.ListParameter(default=[])
 
     # maximum number of workers for this task
     workers_per_task = 4
@@ -239,8 +239,10 @@ class ExtractFragmentsTask(PredictionTask):
             self.sample)
 
         mask_file = os.path.join(self.input_data_dir(), self.sample)
-        if self.mask_context != 0:
-            mask_dataset = 'volumes/labels/mask_erode{}'.format(self.mask_context)
+        if len(self.mask_context) != 0:
+            mask_dataset = 'volumes/labels/mask_erode'
+            for context_in_dim in mask_context:
+                mask_dataset += '_{}'.format(context_in_dim)
         else:
             mask_dataset = 'volumes/labels/mask'
 
@@ -295,7 +297,7 @@ class AgglomerateTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_context = luigi.IntParameter(default=0)
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
 
     # maximum number of workers for this task
@@ -377,7 +379,7 @@ class SegmentTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_context = luigi.IntParameter(default=0)
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
     threshold = luigi.FloatParameter()
 
@@ -456,7 +458,7 @@ class EvaluateTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
-    mask_context = luigi.IntParameter(default=0)
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
     border_threshold = luigi.IntParameter()
     thresholds_minmax = GenericParameter()
