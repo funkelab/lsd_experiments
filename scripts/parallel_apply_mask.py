@@ -52,9 +52,21 @@ def parallel_apply_mask(
 
             The offset in world units to start masking in.
 
-        size (``tuple`` of ``int``):
+        total_size (``tuple`` of ``int``):
 
             The size in world units of the desired ROI.
+        
+        block_size (``tuple`` of ``int``):
+
+            The size of one block in world units.
+
+        num_workers (``int``):
+
+            How many blocks to run in parallel.
+        
+        retry (``int``):
+
+            Number of repeat attempts if any tasks fail in first run.
     """
         in_file,
         in_dataset,
