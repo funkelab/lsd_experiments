@@ -77,9 +77,51 @@ def parallel_contingencies(seg_file,
                            gt_seg_dataset,
                            total_roi,
                            block_size,
-                           chunk_size,
                            num_workers,
                            retry):
+    """
+    Constructs contingency table between a predicted segmentation and a ground
+    truth segmentation blockwise in parallel. Returns sparse (CSC) matrices
+    for the contingencies, the predicted segmentation ID counts, the ground
+    truth segmentation ID counts, and the total value in the contingency table.
+
+    Also see ``contingencies_in_block`` for details on contingency table
+    structure.
+
+    Args:
+
+        seg_file (``string``):
+
+            The input h5-like file containing predicted segmentation.
+
+        seg_dataset (``string``):
+
+            Name of dataset containing predicted segmentation.
+
+        gt_seg_file (``string``):
+
+            The h5-like file containing ground truth segmentation.
+
+        gt_seg_dataset (``string``):
+
+            Name of dataset containing ground truth segmentation.
+
+        total_roi (``daisy.Roi``):
+
+            The desired ROI in which to calculate contingencies.
+
+        block_size (``tuple`` of ``int``):
+
+            The size of one block in world units.
+
+        num_workers (``int``):
+
+            How many blocks to run in parallel.
+
+        retry (``int``):
+
+            Number of repeat attempts if any tasks fail in first run.
+    """
     # define block ROIs for parallel processing
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
