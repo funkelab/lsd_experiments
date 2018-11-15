@@ -80,11 +80,15 @@ def parallel_contingencies(seg_file,
                            chunk_size,
                            num_workers,
                            retry):
+    # define block ROIs for parallel processing
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
-
+    
+    # load segmentation and ground truth segmentation
     seg = daisy.open_ds(seg_file, seg_dataset)
     gt_seg = daisy.open_ds(gt_seg_file, gt_seg_dataset)
+
+    # construct shared memory lists to store partial counts from blocks
     m = mp.Manager()
     blocked_contingencies = m.list()
     blocked_seg_counts = m.list()
@@ -115,12 +119,13 @@ def parallel_contingencies(seg_file,
         if i < retry:
             logging.error("parallel contingencies failed, retrying %d/%d", i + 1, retry)
 
-    logging.debug("Consolidating sparse information")
+    logging.debug("Consolidating sparse partial counts")
 
     total = np.float64(np.sum(blocked_totals))
     contingencies = sparse.csc_matrix(contingencies_shape, dtype=np.uint64)
     seg_counts = sparse.csc_matrix(seg_counts_shape, dtype=np.uint64)
     gt_seg_counts = sparse.csc_matrix(gt_seg_counts_shape, dtype=np.uint64)
+
     for block in blocked_contingencies:
         contingencies += block
     for block in blocked_seg_counts:
