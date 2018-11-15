@@ -19,19 +19,16 @@ def contingencies_in_block(
         seg_counts,
         gt_seg_counts,
         totals,
-        seg_counts_shape,
-        gt_seg_counts_shape,
-        contingencies_shape,
         ignore=[0]):
     """
     Calculates contingencies in block. The table should have structure:
 
-               pred seg      ...
+                  pred seg   ...
              +__________________
              |_|_|_|_|_|_|_|_|_
+             |_|_|_|_|_|_|_|_|_
+             |_|_|_|_|_|_|_|_|_
     gt seg   |_|_|_|_|_|_|_|_|_
-             |_|_|_|_|_|_|_|_|_
-             |_|_|_|_|_|_|_|_|_
              |_|_|_|_|_|_|_|_|_
            . |_|_|_|_|_|_|_|_|_
            . |_|_|_|_|_|_|_|_|_
@@ -108,10 +105,7 @@ def parallel_contingencies(seg_file,
                 blocked_contingencies,
                 blocked_seg_counts,
                 blocked_gt_seg_counts,
-                blocked_totals,
-                seg_counts_shape,
-                gt_seg_counts_shape,
-                contingencies_shape),
+                blocked_totals),
             fit='shrink',
             num_workers=num_workers,
             processes=True,
