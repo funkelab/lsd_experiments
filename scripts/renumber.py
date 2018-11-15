@@ -32,7 +32,7 @@ def renumber(in_file,
 
         out_file (``string``):
 
-            The out h5-like file to which a renumbered segmentation will
+            The output h5-like file to which a renumbered segmentation will
             be written.
 
         out_dataset (``string``):
