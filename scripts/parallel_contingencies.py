@@ -60,8 +60,8 @@ def contingencies_in_block(
             (data, (gt_seg_indices, seg_indices)),
             shape=CONTINGENCIES_SHAPE).tocsc()
     partial_seg_counts = sparse.coo_matrix(
-            (data, (seg_indices, np.zeros(seg_indices.shape))),
-            shape=SEG_COUNTS_SHAPE).tocsr()
+            (data, (np.zeros(seg_indices.shape), seg_indices)),
+            shape=SEG_COUNTS_SHAPE).tocsc()
     partial_gt_seg_counts = sparse.coo_matrix(
             (data, (np.zeros(seg_indices.shape), gt_seg_indices)),
             shape=GT_SEG_COUNTS_SHAPE).tocsc()
