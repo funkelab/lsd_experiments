@@ -11,6 +11,11 @@ from sys import argv, exit
 
 logging.basicConfig(level=logging.DEBUG)
 
+# allow for largest possible contingency table in sparse matrix
+SEG_COUNTS_SHAPE = (int(10e7), 1)
+GT_SEG_COUNTS_SHAPE = (1, int(10e7))
+CONTINGENCIES_SHAPE = (int(10e7), int(10e7))
+
 def contingencies_in_block(
         block,
         seg,
@@ -44,10 +49,6 @@ def contingencies_in_block(
     gt_seg_indices = np.ravel(gt_seg_in_block)
     num_indices = seg_indices.shape
     
-    # allow for largest possible contingency table in sparse matrix
-    seg_counts_shape = (1, int(10e7))
-    gt_seg_counts_shape = (int(10e7), 1)
-    contingencies_shape = (int(10e7), int(10e7))
     
     # ensure certain indices are ignored
     data = np.ones(seg_indices.shape)
@@ -57,13 +58,13 @@ def contingencies_in_block(
     # construct sparse matrices of partial counts
     partial_contingencies = sparse.coo_matrix(
             (data, (gt_seg_indices, seg_indices)),
-            shape=contingencies_shape).tocsc()
+            shape=CONTINGENCIES_SHAPE).tocsc()
     partial_seg_counts = sparse.coo_matrix(
             (data, (seg_indices, np.zeros(seg_indices.shape))),
-            shape=seg_counts_shape).tocsc()
+            shape=SEG_COUNTS_SHAPE).tocsc()
     partial_gt_seg_counts = sparse.coo_matrix(
             (data, (np.zeros(seg_indices.shape), gt_seg_indices)),
-            shape=gt_seg_counts_shape).tocsc()
+            shape=GT_SEG_COUNTS_SHAPE).tocsr()
 
     # append partial counts to shared memory lists
     contingencies.append(partial_contingencies)
@@ -164,9 +165,9 @@ def parallel_contingencies(seg_file,
     logging.debug("Consolidating sparse partial counts")
 
     total = np.float64(np.sum(blocked_totals))
-    contingencies = sparse.csc_matrix(contingencies_shape, dtype=np.uint64)
-    seg_counts = sparse.csc_matrix(seg_counts_shape, dtype=np.uint64)
-    gt_seg_counts = sparse.csc_matrix(gt_seg_counts_shape, dtype=np.uint64)
+    contingencies = sparse.csc_matrix(CONTINGENCIES_SHAPE, dtype=np.uint64)
+    seg_counts = sparse.csc_matrix(SEG_COUNTS_SHAPE, dtype=np.uint64)
+    gt_seg_counts = sparse.csr_matrix(GT_SEG_COUNTS_SHAPE, dtype=np.uint64)
 
     for block in blocked_contingencies:
         contingencies += block
