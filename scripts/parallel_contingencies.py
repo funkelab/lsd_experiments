@@ -61,10 +61,10 @@ def contingencies_in_block(
             shape=CONTINGENCIES_SHAPE).tocsc()
     partial_seg_counts = sparse.coo_matrix(
             (data, (seg_indices, np.zeros(seg_indices.shape))),
-            shape=SEG_COUNTS_SHAPE).tocsc()
+            shape=SEG_COUNTS_SHAPE).tocsr()
     partial_gt_seg_counts = sparse.coo_matrix(
             (data, (np.zeros(seg_indices.shape), gt_seg_indices)),
-            shape=GT_SEG_COUNTS_SHAPE).tocsr()
+            shape=GT_SEG_COUNTS_SHAPE).tocsc()
 
     # append partial counts to shared memory lists
     contingencies.append(partial_contingencies)
