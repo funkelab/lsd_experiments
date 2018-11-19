@@ -15,7 +15,7 @@ def relabel_in_block(block, segmentation_ds, fragments_ds, fragments_map, ignore
     logging.info("Relabeling in {0}".format(block.read_roi))
     volume = fragments_ds[block.read_roi].to_ndarray()
     fragments = np.unique(volume)
-    # fragments = fragments[np.isin(fragments, ignore, invert=True)]
+    fragments = fragments[np.isin(fragments, ignore, invert=True)]
 
     # shift fragment values to potentially save memory when relabeling
     if len(fragments) > 0:
@@ -23,11 +23,14 @@ def relabel_in_block(block, segmentation_ds, fragments_ds, fragments_map, ignore
         offset = 0
         if min_fragment > 0:
             offset = fragments.dtype.type(min_fragment - 1)
-        # volume[np.isin(volume, ignore, invert=True)] -= offset
-        volume -= offset
+        volume[np.isin(volume, ignore, invert=True)] -= offset
         shifted_fragments = fragments - offset
-
-        components = np.array([fragments_map[fragment] for fragment in fragments], dtype=fragments.dtype)
+        
+        components = []
+        for fragment in fragments:
+            if fragment in fragments_map:
+                components.append(fragments_map[fragment])
+        components = np.array(components, dtype=fragments.dtype)
         logging.debug("Restricted fragments map to {0} elements".format(len(components)))
         volume = lsd.labels.replace_values(volume, shifted_fragments, components)
         logging.debug("Writing relabeled block to segmentation volume")
@@ -51,10 +54,11 @@ def parallel_relabel(
     fragments_ds = daisy.open_ds(fragments_file, fragments_dataset)
     
     logging.info("Constructing temporary segmentation dataset")
-    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=fragments_ds.dtype)
+    segmentation_ds = daisy.prepare_ds(seg_file, seg_dataset, total_roi, fragments_ds.voxel_size, dtype=fragments_ds.dtype, write_roi=daisy.Roi(daisy.Coordinate((0, 0, 0)), daisy.Coordinate((2048, 2048, 2048))))
 
     logging.info("Constructing dictionary from fragments to components")
     fragments_map = {fragment: i+1 for i, component in enumerate(components) for fragment in component}
+    print(len(fragments_map))
 
     logging.info("Starting relabeling tasks for {0} components".format(len(components)))
     for i in range(retry + 1):
