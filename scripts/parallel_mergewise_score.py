@@ -40,6 +40,7 @@ def delta_entropy(contingencies,
                   components,
                   total,
                   num_workers):
+    logging.info("Calculating entropy update for {0} merged components".format(len(components)))
     delayed_delta_H_contingencies = [dask.delayed(_delta_entropy_col)(contingencies,
                                                                       c,
                                                                       total)
@@ -85,55 +86,7 @@ def parallel_mergewise_score(
                                      num_workers,
                                      retry)
     
-    seg = daisy.open_ds(seg_file, seg_dataset)
-    gt_seg = daisy.open_ds(gt_seg_file, gt_seg_dataset)
-    m = mp.Manager()
-    blocked_contingencies = m.list()
-    blocked_seg_counts = m.list()
-    blocked_gt_seg_counts = m.list()
-    blocked_totals = m.list()
-
-    logging.info("Calculating contingencies")
-
-    for i in range(retry + 1):
-        if daisy.run_blockwise(
-            total_roi,
-            read_roi,
-            write_roi,
-            lambda b: contingencies_in_block(
-                b,
-                seg,
-                gt_seg,
-                blocked_contingencies,
-                blocked_seg_counts,
-                blocked_gt_seg_counts,
-                blocked_totals,
-                seg_counts_shape,
-                gt_seg_counts_shape,
-                contingencies_shape),
-            fit='shrink',
-            num_workers=num_workers,
-            processes=True,
-            read_write_conflict=False):
-                break
-
-        if i < retry:
-            logging.error("parallel relabel failed, retrying %d/%d", i + 1, retry)
-
-    logging.debug("Consolidating sparse information")
-
-    total = np.float64(np.sum(blocked_totals))
-    contingencies = sparse.csc_matrix(contingencies_shape, dtype=np.uint64)
-    seg_counts = sparse.csc_matrix(seg_counts_shape, dtype=np.uint64)
-    gt_seg_counts = sparse.csc_matrix(gt_seg_counts_shape, dtype=np.uint64)
-    for block in blocked_contingencies:
-        contingencies += block
-    for block in blocked_seg_counts:
-        seg_counts += block
-    for block in blocked_gt_seg_counts:
-        gt_seg_counts += block
-    
-    logging.info("Calculating entropies")
+    logging.info("Calculating entropies for fragments")
 
     dask.config.set(scheduler='processes')
     contingencies_chunks = create_chunk_slices(contingencies.nnz, chunk_size)
@@ -158,5 +111,17 @@ def parallel_mergewise_score(
     H_gt_seg = dask.delayed(sum)(delayed_H_gt_seg).compute(num_workers=num_workers)
     voi_split = H_contingencies - H_gt_seg
     voi_merge = H_contingencies - H_seg
-    logging.info("VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
-    return (voi_split, voi_merge)
+    logging.info("Fragment VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
+    results = [(voi_split, voi_merge)]
+
+    for threshold in thresholds:
+        logging.info("Calculating connected components for threshold {0}".format(threshold))
+        components = rag.get_connected_components(threshold)
+        (delta_H_contingencies, delta_H_seg) = delta_entropy(contingencies,
+                                                             fragment_counts,
+                                                             components,
+                                                             total,
+                                                             num_workers)
+        voi_split = (H_contingencies + delta_H_contingencies) - H_gt_seg
+        voi_merge = (H_contingencies + delta_H_contingencies) - (H_seg + delta_H_seg)
+        results.append((voi_split, voi_merge))
