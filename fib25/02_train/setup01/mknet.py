@@ -66,7 +66,7 @@ def create_network(input_shape, name, make_config=False):
             'input_shape': input_shape,
             'output_shape': output_shape,
             'out_dims': 3,
-            'out_dtype': "float32"}
+            'out_dtype': "uint8"}
         with open('config.json', 'w') as f:
             json.dump(config, f)
 
