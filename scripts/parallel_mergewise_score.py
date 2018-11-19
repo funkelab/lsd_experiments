@@ -8,19 +8,13 @@ import shutil
 import numpy as np
 from scipy import sparse
 from sys import argv, exit
+from parallel_contingencies_map import parallel_contingencies
 
 logging.basicConfig(level=logging.DEBUG)
 
 def _merge_columns(csc_matrix, columns):
     """Returns sum of columns of ``csc_matrix`` specified in ``columns``."""
-    return np.array(csc_matrix[:,columns].sum(1))
-
-def _removed_columns(csc_matrix, columns):
-    """
-    Returns all columns of ``csc_matrix`` specified in ``columns`` except
-    first.
-    """
-    return csc_matrix[:,columns[1:]].toarray()
+    return np.array(csc_matrix[columns,:].sum(1))
 
 def _delta_entropy_col(csc_matrix, columns, total):
     """
