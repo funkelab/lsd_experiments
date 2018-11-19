@@ -26,7 +26,7 @@ def contingencies_in_block(
         totals,
         ignore=[0]):
     """
-    Calculates contingencies in block. The table should have structure:
+    Calculates contingencies in block. The table has structure:
 
                   pred seg   ...
              +__________________
