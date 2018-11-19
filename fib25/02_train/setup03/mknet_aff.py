@@ -2,7 +2,7 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, name, make_config=False):
 
     tf.reset_default_graph()
 
@@ -58,9 +58,25 @@ def create_network(input_shape, name):
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
+    if make_config:
+        config = {
+            'embedding': embedding.name,
+            'affs': affs.name,
+            'gt_affs': gt_affs.name,
+            'affs_loss_weights': affs_loss_weights.name,
+            'loss': loss.name,
+            'optimizer': optimizer.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape,
+            'lsd_setup': 'setup02',
+            'lsd_iteration': 200000,
+            'out_dims': 3,
+            'out_dtype': 'uint8'
+            }
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
+
 if __name__ == "__main__":
 
-    create_network((200, 200, 200), 'train_net')
-    create_network((200, 200, 200), 'test_net')
-    # TODO: find largest test size
-    # create_network((196, 196, 196), 'test_net')
+    create_network((164, 164, 164), 'train_net')
+    create_network((164, 164, 164), 'test_net', make_config=True)
