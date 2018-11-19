@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 def _merge_columns(csc_matrix, columns):
     """Returns sum of columns of ``csc_matrix`` specified in ``columns``."""
-    return np.array(csc_matrix.[:,columns].sum(1))
+    return np.array(csc_matrix[:,columns].sum(1))
 
 def _removed_columns(csc_matrix, columns):
     """
