@@ -4,19 +4,11 @@ import logging
 import lsd
 import sys
 import time
-from parallel_read_rag import parallel_read_nodes_edges
-from pymongo import MongoClient
-from neo4j import GraphDatabase
-
-try:
-    import graph_tool
-    import graph_tool.topology
-    HAVE_GRAPH_TOOL = True
-except:
-    HAVE_GRAPH_TOOL = False
+import glob
+import numpy as np
+from pymongo import MongoClient, ASCENDING
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('lsd.persistence.mongodb_rag_provider').setLevel(logging.DEBUG)
 logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
 
 def store_fragseg_lut(
@@ -29,7 +21,27 @@ def store_fragseg_lut(
     database = client[db_name]
     collection = database[collection_name]
 
-    collection.insert_many(lut)
+    # no need to append, create new one whenever we are here
+    collection.drop()
+
+    collection.create_index(
+        [
+            ('fragment', ASCENDING)
+        ],
+        name='fragment',
+        unique=True)
+
+    collection.create_index(
+        [
+            ('segment', ASCENDING)
+        ],
+        name='segment')
+
+    try:
+        collection.insert_many(lut)
+    except BulkWriteError as e:
+        print(e.details)
+        raise e
 
 def extract_segmentation(
         db_host,
@@ -41,33 +53,55 @@ def extract_segmentation(
         num_workers=1,
         **kwargs):
 
-    driver = GraphDatabase.driver(
-        'bolt://localhost:7687',
-        auth=('neo4j', 'lsd'))
+    edge_files = glob.glob('calyx_dump/edges_*.npy')
+    print("Found %d edge files"%len(edge_files))
 
+    start = time.time()
+    edges = np.concatenate([
+        np.load(edge_file)
+        for edge_file in edge_files
+    ])
+    print("Read all edges in %.3fs"%(time.time() - start))
+
+    score_files = glob.glob('calyx_dump/scores_*.npy')
+    print("Found %d score files"%len(score_files))
+
+    start = time.time()
+    scores = np.concatenate([
+        np.load(score_file)
+        for score_file in score_files
+    ])
+    print("Read all scores in %.3fs"%(time.time() - start))
+
+    node_files = glob.glob('calyx_dump/nodes_*.csv')
+    print("Found %d node files"%len(node_files))
+
+    start = time.time()
+    nodes = np.concatenate([
+        np.load(node_file)
+        for node_file in node_files
+    ])
+    print("Read all nodes in %.3fs"%(time.time() - start))
+
+    print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
 
     for threshold in thresholds:
 
-        with driver.session() as session:
+        print("Getting CCs for threshold %.3f..."%threshold)
+        start = time.time()
+        components = lsd.connected_components(nodes, edges, scores, threshold)
+        print("%.3fs"%(time.time() - start))
 
-            print("Getting CCs for threshold %.3f..."%threshold)
-            start = time.time()
-            res = session.run('''
-                CALL algo.unionFind.stream('', 'MERGES', {threshold:%f, concurrency:1})
-                YIELD nodeId,setId
-                RETURN algo.getNodeById(nodeId).id as id, setId'''%(1.0 - threshold))
-            print("%.3fs"%(time.time() - start))
-
-            print("Creating fragment-segment LUT...")
-            start = time.time()
-            lut = list([
-                {
-                    'fragment': int(r['id']),
-                    'segment': r['setId']
-                }
-                for r in res
-            ])
-            print("%.3fs"%(time.time() - start))
+        print("Creating fragment-segment LUT...")
+        start = time.time()
+        lut = list([
+            {
+                'fragment': int(f),
+                'segment': int(s)
+            }
+            for f, s in zip(nodes, components)
+        ])
+        print("%.3fs"%(time.time() - start))
 
         print("Storing fragment-segment LUT...")
         start = time.time()
