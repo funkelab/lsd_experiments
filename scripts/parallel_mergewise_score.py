@@ -62,18 +62,17 @@ def create_chunk_slices(total_size, chunk_size):
     logging.debug("Creating chunks of size {0} for {1} elements".format(chunk_size, total_size))
     return [slice(i, min(i+chunk_size, total_size)) for i in range(0, total_size, chunk_size)]
 
-def parallel_mergewise_score(
-        rag,
-        fragments_file,
-        fragments_dataset,
-        gt_seg_file,
-        gt_seg_dataset,
-        total_roi,
-        block_size,
-        chunk_size,
-        thresholds,
-        num_workers,
-        retry):
+def parallel_mergewise_score(rag,
+                             fragments_file,
+                             fragments_dataset,
+                             gt_seg_file,
+                             gt_seg_dataset,
+                             total_roi,
+                             block_size,
+                             chunk_size,
+                             thresholds,
+                             num_workers,
+                             retry):
     (contingencies,
      fragment_counts,
      gt_seg_counts,
