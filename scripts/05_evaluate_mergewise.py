@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 from skimage.measure import label, regionprops
 from skimage.morphology import remove_small_objects
-from parallel_score import parallel_score
+from parallel_mergewise_score import parallel_mergewise_score
 import daisy
 import json
 import logging
@@ -24,12 +24,16 @@ def evaluate(gt_file,
              rag_db_name,
              edges_collection,
              scores_db_name,
+             block_size,
+             chunk_size,
+             num_workers,
              thresholds_minmax,
              thresholds_step,
              configuration):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
+    total_roi = fragments.roi
 
     # open RAG DB
     rag_provider = lsd.persistence.MongoDbRagProvider(
@@ -38,13 +42,10 @@ def evaluate(gt_file,
         mode='r',
         edges_collection=edges_collection)
 
-    #open score DB
-
+    # open score DB
     client = MongoClient(db_host)
     database = client[scores_db_name]
     score_collection = database['scores']
-
-    total_roi = fragments.roi
 
     # slice
     logger.info("Reading RAG in {0}".format(total_roi))
@@ -53,11 +54,12 @@ def evaluate(gt_file,
     logger.info("Number of nodes in RAG: %d", len(rag.nodes()))
     logger.info("Number of edges in RAG: %d", len(rag.edges()))
 
-    #read gt data and determine where we have both fragments and GT
+    # read gt data and determine where we have both fragments and GT
     gt = daisy.open_ds(gt_file, gt_dataset) # NOTE: assuming renumbered GT
     common_roi = fragments.roi.intersect(gt.roi)
     logger.info("Found common ROI {0}".format(common_roi))
 
+    # calculate thresholds and scores
     thresholds = list(np.arange(
         thresholds_minmax[0],
         thresholds_minmax[1],
@@ -73,7 +75,7 @@ def evaluate(gt_file,
                                       chunk_size,
                                       thresholds,
                                       num_workers,
-                                      retry)
+                                      retry=2)
 
     for i in range(len(scores)):
         # get score values
