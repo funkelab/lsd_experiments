@@ -30,7 +30,7 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('lsd_context_net_config.json', 'r') as f:
+    with open('train_net_config.json', 'r') as f:
         context_config = json.load(f)
         
     with open('lsd_net_config.json', 'r') as f:
@@ -128,8 +128,8 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup02/train_net_checkpoint_200000',
-            graph='sd_net.meta',
+            checkpoint='../setup02_tmp/train_net_checkpoint_200000',
+            graph='lsd_net.meta',
             inputs={
                 lsd_config['raw']: raw
             },
@@ -137,7 +137,7 @@ def train_until(max_iteration):
                 lsd_config['embedding']: pretrained_lsd
             }) +
         Train(
-            'lsd_context_net',
+            'train_net',
             optimizer=context_config['optimizer'],
             loss=context_config['loss'],
             inputs={
@@ -153,7 +153,7 @@ def train_until(max_iteration):
                 context_config['affs']: affs
             },
             gradients={},
-            save_every=10000) +
+            save_every=100000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         IntensityScaleShift(raw_cropped, 0.5, 0.5) +
         Snapshot({
@@ -167,7 +167,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=10000,
+            every=100000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -180,6 +180,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)

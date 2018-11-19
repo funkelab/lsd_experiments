@@ -2,7 +2,7 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, num_features, name):
+def create_network(input_shape, num_features, name, make_config=False):
 
     tf.reset_default_graph()
 
@@ -14,22 +14,20 @@ def create_network(input_shape, num_features, name):
 
     concat_input = tf.concat([raw_batched, pretrained_lsd_batched], axis=1)
 
-    unet = mala.networks.unet(concat_input, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet, _, _ = mala.networks.unet(concat_input, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
 
-    embedding_batched = mala.networks.conv_pass(
+    embedding_batched, _ = mala.networks.conv_pass(
         unet,
-        kernel_size=1,
+        kernel_sizes=[1],
         num_fmaps=num_features,
-        num_repetitions=1,
         activation='sigmoid',
         name='embedding')
     embedding = tf.squeeze(embedding_batched, axis=0)
 
-    affs_batched = mala.networks.conv_pass(
+    affs_batched, _ = mala.networks.conv_pass(
         unet,
-        kernel_size=1,
+        kernel_sizes=[1],
         num_fmaps=3,
-        num_repetitions=1,
         activation='sigmoid',
         name='affs')
     affs = tf.squeeze(affs_batched, axis=0)
@@ -81,8 +79,26 @@ def create_network(input_shape, num_features, name):
         }
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
+    
+    if make_config:
+        config = {
+            'embedding': embedding.name,
+            'affs': affs.name,
+            'gt_affs': gt_affs.name,
+            'affs_loss_weights': affs_loss_weights.name,
+            'loss': loss.name,
+            'optimizer': optimizer.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape,
+            'lsd_setup': 'setup02',
+            'lsd_iteration': 200000,
+            'out_dims': 3,
+            'out_dtype': 'uint8'
+            }
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
 
 if __name__ == "__main__":
 
-    create_network((196, 196, 196), 10, 'lsd_context_net')
-    create_network((196, 196, 196), 10, 'test_net')
+    create_network((164, 164, 164), 10, 'train_net')
+    create_network((164, 164, 164), 10, 'test_net', make_config=True)
