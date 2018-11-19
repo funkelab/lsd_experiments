@@ -1,1 +1,1 @@
-{"raw": "Placeholder:0", "embedding": "Reshape_1:0", "gt_embedding": "Placeholder_1:0", "embedding_loss_weights": "Placeholder_2:0", "loss": "mean_squared_error/value:0", "optimizer": "Adam", "input_shape": [196, 196, 196], "output_shape": [92, 92, 92]}
+{"optimizer": "Adam", "loss": "mean_squared_error/value:0", "input_shape": [196, 196, 196], "embedding_loss_weights": "Placeholder_2:0", "embedding": "Reshape_1:0", "output_shape": [92, 92, 92], "gt_embedding": "Placeholder_1:0", "raw": "Placeholder:0"}

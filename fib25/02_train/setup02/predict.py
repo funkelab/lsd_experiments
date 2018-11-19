@@ -26,7 +26,7 @@ def predict(iteration, in_file, read_roi, out_file):
     chunk_request.add(embedding, output_size)
 
     pipeline = (
-        N5Source(
+        ZarrSource(
             in_file,
             datasets = {
                 raw: 'volumes/raw'
@@ -46,7 +46,7 @@ def predict(iteration, in_file, read_roi, out_file):
             },
             graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
-        N5Write(
+        ZarrWrite(
             dataset_names={
                 embedding: 'volumes/lsds',
             },
@@ -77,6 +77,6 @@ if __name__ == "__main__":
         config['read_size'])
     predict(
         config['iteration'],
-        config['in_file'],
+        config['raw_file'],
         read_roi,
         config['out_file'])
