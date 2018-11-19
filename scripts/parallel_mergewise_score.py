@@ -24,6 +24,16 @@ def _merge_columns(counter, columns, new_column):
             merged[key] += counter[key]
     return merged
 
+def _removed_columns(counter, columns):
+    """Returns only columns of ``counter`` specified in ``columns``."""
+    removed = Counter()
+    for key in counter.keys():
+        if isinstance(key, tuple) and key[1] in columns:
+            removed[key] += counter[key]
+        elif key in columns:
+            removed[key] += counter[key]
+    return removed
+
 def _delta_entropy_col(csc_matrix, columns, total):
     """
     Returns change in entropy resulting from a merge of columns of ``csc_matrix
