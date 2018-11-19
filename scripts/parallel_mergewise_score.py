@@ -17,10 +17,10 @@ def _merge_columns(counter, columns, new_column):
     """Returns sum of columns of ``counter`` specified in ``columns``."""
     merged = Counter()
     for key in counter.keys():
-        if isinstance(key, tuple):
+        if isinstance(key, tuple) and key[1] in columns:
             (gt_column, old_column) = key
             merged[(gt_column, new_column)] += counter[key]
-        else:
+        elif key in columns:
             merged[key] += counter[key]
     return merged
 
