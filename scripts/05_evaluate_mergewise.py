@@ -15,19 +15,18 @@ import waterz
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def evaluate(
-        gt_file,
-        gt_dataset,
-        fragments_file,
-        fragments_dataset,
-        border_threshold,
-        db_host,
-        rag_db_name,
-        edges_collection,
-        scores_db_name,
-        thresholds_minmax,
-        thresholds_step,
-        configuration):
+def evaluate(gt_file,
+             gt_dataset,
+             fragments_file,
+             fragments_dataset,
+             border_threshold,
+             db_host,
+             rag_db_name,
+             edges_collection,
+             scores_db_name,
+             thresholds_minmax,
+             thresholds_step,
+             configuration):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
