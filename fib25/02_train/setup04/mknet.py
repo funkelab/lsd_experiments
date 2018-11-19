@@ -2,7 +2,7 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, name, make_config=False):
 
     tf.reset_default_graph()
 
@@ -28,7 +28,7 @@ def create_network(input_shape, name):
         activation='sigmoid',
         name='affs')
     affs = tf.squeeze(affs_batched, axis=0)
-
+    
     output_shape = tuple(affs.get_shape().as_list()[1:])
 
     gt_embedding = tf.placeholder(tf.float32, shape=(10,) + output_shape)
@@ -73,7 +73,25 @@ def create_network(input_shape, name):
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
 
+    if make_config:
+        config = {
+            'raw': raw.name,
+            'embedding': embedding.name,
+            'affs': affs.name,
+            'gt_embedding': gt_embedding.name,
+            'gt_affs': gt_affs.name,
+            'loss_weights_embedding': loss_weights_embedding.name,
+            'loss_weights_affs': loss_weights_affs.name,
+            'loss': loss.name,
+            'optimizer': optimizer.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape,
+            'out_dims': 3,
+            'out_dtype': 'uint8'}
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
+
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((336, 336, 336), 'test_net')
+    create_network((336, 336, 336), 'test_net', make_config=True)
