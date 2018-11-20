@@ -41,8 +41,8 @@ def _delta_entropy_col(counter, columns, total, new_column):
     """
     removed_columns = _removed_columns(counter, columns)
     merged_column = _merge_columns(counter, columns, new_column)
-    entropy_to_remove = entropy_in_chunk(removed_columns, total)
-    entropy_to_add = entropy_in_chunk(merged_column, total)
+    entropy_to_remove = entropy_in_chunk(list(removed_columns.values()), total)
+    entropy_to_add = entropy_in_chunk(list(merged_column.values()), total)
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy(contingencies,
