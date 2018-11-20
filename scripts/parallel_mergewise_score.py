@@ -34,17 +34,15 @@ def _removed_columns(counter, columns):
             removed[key] += counter[key]
     return removed
 
-def _delta_entropy_col(csc_matrix, columns, total):
+def _delta_entropy_col(counter, columns, total):
     """
-    Returns change in entropy resulting from a merge of columns of ``csc_matrix
+    Returns change in entropy resulting from a merge of columns of ``counter``
     specified in ``columns``.
     """
-    removed_columns = _removed_columns(csc_matrix, columns)
-    removed_elements = removed_columns[np.nonzero(removed_columns)]
-    merged_column = _merge_columns(csc_matrix, columns)
-    merged_elements = merged_column[np.nonzero(merged_column)]
-    entropy_to_remove = entropy_in_chunk(removed_elements, total)
-    entropy_to_add = entropy_in_chunk(merged_column)
+    removed_columns = _removed_columns(counter, columns)
+    merged_column = _merge_columns(counter, columns)
+    entropy_to_remove = entropy_in_chunk(removed_columns, total)
+    entropy_to_add = entropy_in_chunk(merged_column, total)
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy(contingencies,
