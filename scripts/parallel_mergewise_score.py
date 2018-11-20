@@ -62,7 +62,7 @@ def delta_entropy(contingencies,
                                                                       total,
                                                                       i+1)
                                      for i, c in enumerate(components)]
-    delayed_delta_H_seg = [dask.delayed(_delta_entropy_col)(contingencies,
+    delayed_delta_H_seg = [dask.delayed(_delta_entropy_col)(fragment_counts,
                                                             c,
                                                             total,
                                                             i+1)
