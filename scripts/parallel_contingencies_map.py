@@ -55,7 +55,7 @@ def contingencies_in_block(
     gt_seg_indices = gt_seg_indices[not_ignored]
     
     # construct maps of partial counts
-    partial_contingencies = Counter(list(np.stack([seg_indices, gt_seg_indices], axis=1)))
+    partial_contingencies = Counter(np.stack([seg_indices, gt_seg_indices], axis=1).tolist())
     partial_seg_counts = Counter(seg_indices)
     partial_gt_seg_counts = Counter(gt_seg_indices)
 
