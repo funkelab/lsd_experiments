@@ -50,6 +50,12 @@ def delta_entropy(contingencies,
                   components,
                   total,
                   num_workers):
+    """
+    Returns the calculated updates required to the entropies of the given
+    ``contingencies`` and ``fragment_counts`` as a result of merging the
+    fragments of each component in ``components``. This computation is
+    performed in parallel with ``num_workers`` processes.
+    """
     logging.info("Calculating entropy update for {0} merged components".format(len(components)))
     delayed_delta_H_contingencies = [dask.delayed(_delta_entropy_col)(contingencies,
                                                                       c,
@@ -64,11 +70,16 @@ def delta_entropy(contingencies,
     return (delta_H_contingencies, delta_H_seg)
 
 def entropy_in_chunk(chunk, total):
+    """
+    Returns entropy contribution of ``chunk`` of larger array given the
+    ``total`` value.
+    """
     # assumes chunk is nonzero
     probabilities = chunk / total
     return np.sum(-probabilities * np.log2(probabilities))
 
 def create_chunk_slices(total_size, chunk_size):
+    """Returns slices of size min(remaining elements, ``chunk_size``)."""
     logging.debug("Creating chunks of size {0} for {1} elements".format(chunk_size, total_size))
     return [slice(i, min(i+chunk_size, total_size)) for i in range(0, total_size, chunk_size)]
 
