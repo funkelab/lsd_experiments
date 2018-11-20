@@ -3,7 +3,7 @@ import daisy
 import lsd
 import logging
 
-# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def read_graph_in_block(block, rag_provider, shared_node_list, shared_edge_list):
@@ -54,7 +54,7 @@ def parallel_read_rag(
                 break
 
         if i < retry:
-            logging.error("parallel read failed, retrying %d/%d", i + 1, retry)
+            logger.error("parallel read failed, retrying %d/%d", i + 1, retry)
 
     graph = lsd.persistence.mongodb_rag_provider.MongoDbSubRag(db_name, db_host, 'r')
     graph.add_nodes_from(node_list)
