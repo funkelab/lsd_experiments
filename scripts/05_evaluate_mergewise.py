@@ -75,7 +75,7 @@ def evaluate(gt_file,
                                       chunk_size,
                                       thresholds,
                                       num_workers,
-                                      retry=2)
+                                      2)
 
     for i in range(len(scores)):
         # get score values
