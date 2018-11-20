@@ -21,7 +21,7 @@ def _merge_columns(counter, columns, new_column):
             (gt_column, old_column) = key
             merged[(gt_column, new_column)] += counter[key]
         elif key in columns:
-            merged[key] += counter[key]
+            merged[new_column] += counter[key]
     return merged
 
 def _removed_columns(counter, columns):
@@ -34,13 +34,13 @@ def _removed_columns(counter, columns):
             removed[key] += counter[key]
     return removed
 
-def _delta_entropy_col(counter, columns, total):
+def _delta_entropy_col(counter, columns, total, new_column):
     """
     Returns change in entropy resulting from a merge of columns of ``counter``
     specified in ``columns``.
     """
     removed_columns = _removed_columns(counter, columns)
-    merged_column = _merge_columns(counter, columns)
+    merged_column = _merge_columns(counter, columns, new_column)
     entropy_to_remove = entropy_in_chunk(removed_columns, total)
     entropy_to_add = entropy_in_chunk(merged_column, total)
     return entropy_to_add - entropy_to_remove
@@ -59,12 +59,14 @@ def delta_entropy(contingencies,
     logging.info("Calculating entropy update for {0} merged components".format(len(components)))
     delayed_delta_H_contingencies = [dask.delayed(_delta_entropy_col)(contingencies,
                                                                       c,
-                                                                      total)
-                                     for c in components]
+                                                                      total,
+                                                                      i+1)
+                                     for i, c in enumerate(components)]
     delayed_delta_H_seg = [dask.delayed(_delta_entropy_col)(contingencies,
                                                             c,
-                                                            total)
-                                     for c in components]
+                                                            total,
+                                                            i+1)
+                                     for i, c in enumerate(components)]
     delta_H_contingincies = dask.delayed(sum)(delayed_delta_H_contingencies).compute(num_workers=num_workers)
     delta_H_seg = dask.delayed(sum)(delayed_delta_H_contingencies).compute(num_workers=num_workers)
     return (delta_H_contingencies, delta_H_seg)
