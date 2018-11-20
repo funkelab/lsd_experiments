@@ -12,11 +12,6 @@ from collections import Counter
 
 logging.basicConfig(level=logging.DEBUG)
 
-# allow for largest possible contingency table in sparse matrix
-SEG_COUNTS_SHAPE = (int(10e7), 1)
-GT_SEG_COUNTS_SHAPE = (1, int(10e7))
-CONTINGENCIES_SHAPE = (int(10e7), int(10e7))
-
 def contingencies_in_block(
         block,
         seg,
