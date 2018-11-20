@@ -50,9 +50,9 @@ def contingencies_in_block(
     gt_seg_indices = gt_seg_indices[not_ignored]
     
     # construct maps of partial counts
-    partial_contingencies = Counter(np.stack([seg_indices, gt_seg_indices], axis=1).tolist())
-    partial_seg_counts = Counter(seg_indices)
-    partial_gt_seg_counts = Counter(gt_seg_indices)
+    partial_contingencies = Counter([tuple(l) for l in np.stack([seg_indices, gt_seg_indices], axis=1).tolist()])
+    partial_seg_counts = Counter(seg_indices.tolist())
+    partial_gt_seg_counts = Counter(gt_seg_indices.tolist())
 
     # append partial counts to shared memory lists
     contingencies.append(partial_contingencies)
@@ -163,5 +163,10 @@ def parallel_contingencies(seg_file,
         seg_counts += block
     for block in blocked_gt_seg_counts:
         gt_seg_counts += block
+
+    print(contingencies)
+    print(len(contingencies))
+    print(len(seg_counts))
+    print(total)
 
     return (contingencies, seg_counts, gt_seg_counts, total)
