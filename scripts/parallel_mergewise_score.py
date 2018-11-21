@@ -13,6 +13,7 @@ from parallel_contingencies_map import parallel_contingencies
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def _merge_columns(counter, columns, new_column):
     """Returns sum of columns of ``counter`` specified in ``columns``."""
