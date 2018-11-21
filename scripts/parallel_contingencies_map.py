@@ -10,7 +10,8 @@ from scipy import sparse
 from sys import argv, exit
 from collections import Counter
 
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def contingencies_in_block(
         block,
@@ -37,7 +38,7 @@ def contingencies_in_block(
 
     """
     # read data in block
-    logging.info("Calculating contingencies in {0}".format(block.read_roi))
+    logger.info("Calculating contingencies in {0}".format(block.read_roi))
     block_id = block.block_id
     seg_in_block =  seg[block.read_roi].to_ndarray()
     gt_seg_in_block = gt_seg[block.read_roi].to_ndarray()
@@ -126,7 +127,7 @@ def parallel_contingencies(seg_file,
     blocked_gt_seg_counts = m.list()
     blocked_totals = m.list()
 
-    logging.info("Calculating contingencies")
+    logger.info("Calculating contingencies")
 
     for i in range(retry + 1):
         if daisy.run_blockwise(
@@ -148,9 +149,9 @@ def parallel_contingencies(seg_file,
                 break
 
         if i < retry:
-            logging.error("parallel contingencies failed, retrying %d/%d", i + 1, retry)
+            logger.error("parallel contingencies failed, retrying %d/%d", i + 1, retry)
 
-    logging.debug("Consolidating sparse partial counts")
+    logger.debug("Consolidating sparse partial counts")
 
     total = np.sum(np.uint64(blocked_totals))
     contingencies = Counter()
@@ -163,10 +164,5 @@ def parallel_contingencies(seg_file,
         seg_counts += block
     for block in blocked_gt_seg_counts:
         gt_seg_counts += block
-
-    print(contingencies)
-    print(len(contingencies))
-    print(len(seg_counts))
-    print(total)
 
     return (contingencies, seg_counts, gt_seg_counts, total)
