@@ -64,6 +64,7 @@ def delta_entropy(contingencies,
                   fragment_counts,
                   components,
                   total,
+                  chunk_size,
                   num_workers):
     """
     Returns the calculated updates required to the entropies of the given
@@ -71,7 +72,7 @@ def delta_entropy(contingencies,
     fragments of each component in ``components``. This computation is
     performed in parallel with ``num_workers`` processes.
     """
-    components_chunks = create_chunk_slices(len(components), 1000)
+    components_chunks = create_chunk_slices(len(components), chunk_size)
     delayed_delta_H_contingencies = [dask.delayed(delta_entropy_in_chunk)(contingencies,
                                                                           components[chunk],
                                                                           chunk,
@@ -163,7 +164,7 @@ def parallel_mergewise_score(rag,
                                                                 fragment_counts,
                                                                 gt_seg_counts,
                                                                 total,
-                                                                chunk_size,
+                                                                table_chunk_size,
                                                                 num_workers)
     voi_split = H_contingencies - H_gt_seg
     voi_merge = H_contingencies - H_seg
@@ -177,6 +178,7 @@ def parallel_mergewise_score(rag,
                                                              fragment_counts,
                                                              components,
                                                              total,
+                                                             component_chunk_size,
                                                              num_workers)
         logger.info("Calculated updates are {0} and {1}".format(delta_H_contingencies,
                                                                  delta_H_seg))
