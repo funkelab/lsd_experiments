@@ -5,6 +5,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def read_graph_in_block(block, rag_provider, shared_node_list, shared_edge_list):
 
