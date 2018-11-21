@@ -55,7 +55,7 @@ def predict(iteration, in_file, read_roi, out_file):
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request)
+        Scan(chunk_request, num_workers=10)
     )
 
     print("Starting prediction...")
