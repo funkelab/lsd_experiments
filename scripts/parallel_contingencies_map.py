@@ -10,6 +10,7 @@ from scipy import sparse
 from sys import argv, exit
 from collections import Counter
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
