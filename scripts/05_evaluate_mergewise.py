@@ -76,7 +76,6 @@ def evaluate(gt_file,
                                       thresholds,
                                       num_workers,
                                       2)
-
     for i in range(len(scores)):
         # get score values
         (voi_split, voi_merge) = scores[i]
@@ -89,7 +88,7 @@ def evaluate(gt_file,
                    'threshold': threshold}
         metrics.update(configuration)
         score_collection.insert(metrics)
-        logger.info(metrics)
+        logger.debug(metrics)
         
 if __name__ == "__main__":
 
