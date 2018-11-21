@@ -11,7 +11,8 @@ from sys import argv, exit
 from collections import Counter
 from parallel_contingencies_map import parallel_contingencies
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def _merge_columns(counter, columns, new_column):
     """Returns sum of columns of ``counter`` specified in ``columns``."""
@@ -52,7 +53,7 @@ def _delta_entropy_col(counter, columns, total, new_column):
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy_in_chunk(counter, components_in_chunk, chunk, num_components, total):
-    logging.info("Calculating entropy update for {0} merged components".format(len(components_in_chunk)))
+    logger.info("Calculating entropy update for {0} merged components".format(len(components_in_chunk)))
     delta = 0
     new_columns = range(*chunk.indices(num_components))
     for i, component in enumerate(components_in_chunk):
@@ -98,7 +99,7 @@ def entropy_in_chunk(chunk, total):
 
 def create_chunk_slices(total_size, chunk_size):
     """Returns slices of size min(remaining elements, ``chunk_size``)."""
-    logging.debug("Creating chunks of size {0} for {1} elements".format(chunk_size, total_size))
+    logger.debug("Creating chunks of size {0} for {1} elements".format(chunk_size, total_size))
     return [slice(i, min(i+chunk_size, total_size)) for i in range(0, total_size, chunk_size)]
 
 def segmentation_entropies(contingencies,
@@ -156,7 +157,7 @@ def parallel_mergewise_score(rag,
                                      num_workers,
                                      retry)
     
-    logging.info("Calculating entropies for fragments")
+    logger.info("Calculating entropies for fragments")
     (H_contingencies, H_seg, H_gt_seg) = segmentation_entropies(contingencies,
                                                                 fragment_counts,
                                                                 gt_seg_counts,
@@ -165,18 +166,18 @@ def parallel_mergewise_score(rag,
                                                                 num_workers)
     voi_split = H_contingencies - H_gt_seg
     voi_merge = H_contingencies - H_seg
-    logging.info("Fragment VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
+    logger.info("Fragment VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
 
     results = [] 
     for threshold in thresholds:
-        logging.info("Calculating connected components for threshold {0}".format(threshold))
+        logger.info("Calculating connected components for threshold {0}".format(threshold))
         components = rag.get_connected_components(threshold)
         (delta_H_contingencies, delta_H_seg) = delta_entropy(contingencies,
                                                              fragment_counts,
                                                              components,
                                                              total,
                                                              num_workers)
-        logging.info("Calculated updates are {0} and {1}".format(delta_H_contingencies,
+        logger.info("Calculated updates are {0} and {1}".format(delta_H_contingencies,
                                                                  delta_H_seg))
         voi_split = (H_contingencies + delta_H_contingencies) - H_gt_seg
         voi_merge = (H_contingencies + delta_H_contingencies) - (H_seg + delta_H_seg)
