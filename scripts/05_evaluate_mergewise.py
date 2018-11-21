@@ -2,6 +2,7 @@ from pymongo import MongoClient
 from skimage.measure import label, regionprops
 from skimage.morphology import remove_small_objects
 from parallel_mergewise_score import parallel_mergewise_score
+from parallel_read_rag import parallel_read_rag
 import daisy
 import json
 import logging
@@ -14,6 +15,7 @@ import waterz
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def evaluate(gt_file,
              gt_dataset,
@@ -36,13 +38,6 @@ def evaluate(gt_file,
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
     total_roi = fragments.roi
 
-    # open RAG DB
-    rag_provider = lsd.persistence.MongoDbRagProvider(
-        rag_db_name,
-        host=db_host,
-        mode='r',
-        edges_collection=edges_collection)
-
     # open score DB
     client = MongoClient(db_host)
     database = client[scores_db_name]
@@ -50,7 +45,14 @@ def evaluate(gt_file,
 
     # slice
     logger.info("Reading RAG in {0}".format(total_roi))
-    rag = rag_provider[total_roi]
+    rag = parallel_read_rag(
+            total_roi,
+            db_host,
+            rag_db_name,
+            edges_collection,
+            block_size,
+            num_workers,
+            2)
 
     logger.info("Number of nodes in RAG: %d", len(rag.nodes()))
     logger.info("Number of edges in RAG: %d", len(rag.edges()))
