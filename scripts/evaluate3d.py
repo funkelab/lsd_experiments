@@ -1,7 +1,6 @@
 from pymongo import MongoClient
 from parallel_read_rag import parallel_read_rag
 from parallel_relabel import parallel_relabel
-from parallel_renumber import parallel_renumber
 from parallel_score import parallel_score
 from skimage.measure import label
 from skimage.morphology import remove_small_objects
@@ -33,6 +32,7 @@ def evaluate(
         scores_db_name,
         thresholds_minmax,
         thresholds_step,
+        configuration,
         num_workers,
         retry):
 
@@ -69,28 +69,28 @@ def evaluate(
 
     renumbered_gt_dataset = 'volumes/labels/renumbered_neuron_ids'
 
-    if not os.path.isdir(os.path.join(fragments_file, renumbered_gt_dataset)):
-        gt = gt[common_roi]
-        gt.materialize()
-        #relabel connected components in common ROI
-        logging.info("Relabelling connected components in GT...")
-        components = gt.data
-        dtype = components.dtype
-        relabeled_components = label(components, connectivity=1)
-        relabeled_components = remove_small_objects(relabeled_components, min_size=2, in_place=True)
-        logging.info("Equivalent to original GT: {}".format(np.all(gt.data == relabeled_components)))
-        logging.info("Done relabeling with skimage")
-        # curate GT
-        gt.data = relabeled_components.astype(dtype)
-        renumbered_gt = daisy.prepare_ds(fragments_file,
-                                         renumbered_gt_dataset,
-                                         common_roi,
-                                         gt.voxel_size,
-                                         gt.data.dtype)
-        renumbered_gt[common_roi] = gt.data
-        logging.info('Stored relabeled GT connected components')
-    
-    gt = daisy.open_ds(fragments_file, renumbered_gt_dataset)
+    # if not os.path.isdir(os.path.join(fragments_file, renumbered_gt_dataset)):
+    #     gt = gt[common_roi]
+    #     gt.materialize()
+    #     #relabel connected components in common ROI
+    #     logging.info("Relabelling connected components in GT...")
+    #     components = gt.data
+    #     dtype = components.dtype
+    #     relabeled_components = label(components, connectivity=1)
+    #     relabeled_components = remove_small_objects(relabeled_components, min_size=2, in_place=True)
+    #     logging.info("Equivalent to original GT: {}".format(np.all(gt.data == relabeled_components)))
+    #     logging.info("Done relabeling with skimage")
+    #     # curate GT
+    #     gt.data = relabeled_components.astype(dtype)
+    #     renumbered_gt = daisy.prepare_ds(fragments_file,
+    #                                      renumbered_gt_dataset,
+    #                                      common_roi,
+    #                                      gt.voxel_size,
+    #                                      gt.data.dtype)
+    #     renumbered_gt[common_roi] = gt.data
+    #     logging.info('Stored relabeled GT connected components')
+    # 
+    # gt = daisy.open_ds(fragments_file, renumbered_gt_dataset)
     
     thresholds = list(np.arange(
         thresholds_minmax[0],
@@ -123,6 +123,7 @@ def evaluate(
         (voi_split, voi_merge) = parallel_score(
                 fragments_file,
                 seg_dataset,
+                gt_file,
                 renumbered_gt_dataset,
                 common_roi,
                 block_size,
@@ -130,12 +131,13 @@ def evaluate(
                 seg_counts_shape,
                 gt_seg_counts_shape,
                 contingencies_shape,
-                num_workers=8,
+                num_workers=16,
                 retry=retry)
         
         # store values in db
         logging.info("Storing VOI values for threshold %f in DB" %threshold)
         metrics = {'voi_split': voi_split, 'voi_merge': voi_merge, 'threshold': threshold}
+        metrics.update(configuration)
         score_collection.insert(metrics)
         logging.info("Threshold: {0} VOI split: {1} VOI merge: {2}".format(
             threshold, voi_split, voi_merge))
