@@ -41,14 +41,28 @@ def _merge_columns(counter, new_column):
         merged = _merge_columns_1D(counter, new_column)
     return merged
 
-def _removed_columns(counter, columns):
-    """Returns only columns of ``counter`` specified in ``columns``."""
+def _removed_columns_2D(counter, columns):
+    """Implements ``_removed_columns`` for a matrix with >1 rows."""
     removed = Counter()
     for key in counter.keys():
-        if isinstance(key, tuple) and key[1] in columns:
+        if key[1] in columns:
             removed[key] += counter[key]
-        elif key in columns:
+    return removed
+
+def _removed_columns_1D(counter, columns):
+    """Implements ``_removed_columns`` for a row vector."""
+    removed = Counter()
+    for key in counter.keys():
+        if key in columns:
             removed[key] += counter[key]
+    return removed
+
+def _removed_columns(counter, columns):
+    """Returns only columns of ``counter`` specified in ``columns``."""
+    if isinstance(list(counter.keys())[0], tuple):
+        removed = _removed_columns_2D(counter, columns)
+    else:
+        removed = _removed_columns_1D(counter, columns)
     return removed
 
 def _delta_entropy_col(counter, columns, total, new_column):
