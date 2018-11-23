@@ -15,14 +15,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def _merge_columns(counter, columns, new_column):
-    """Returns sum of columns of ``counter`` specified in ``columns``."""
+def _merge_columns(counter, new_column):
+    """
+    Creates new column with ID ``new_column`` containing sum of all columns of
+    ``counter``.
+    """
     merged = Counter()
     for key in counter.keys():
-        if isinstance(key, tuple) and key[1] in columns:
+        if isinstance(key, tuple):
             (gt_column, old_column) = key
             merged[(gt_column, new_column)] += counter[key]
-        elif key in columns:
+        else:
             merged[new_column] += counter[key]
     return merged
 
@@ -41,9 +44,11 @@ def _delta_entropy_col(counter, columns, total, new_column):
     Returns change in entropy resulting from a merge of columns of ``counter``
     specified in ``columns``.
     """
-    removed_columns = np.array(list(_removed_columns(counter, columns).values()),
-                               dtype=np.float64)
-    merged_column = np.array(list(_merge_columns(counter, columns, new_column).values()),
+    removed_columns_counter = _removed_columns(counter, columns)
+    removed_columns =  np.array(list(removed_columns_counter.values()),
+                                dtype=np.float64)
+    merged_column = np.array(list(_merge_columns(removed_columns_counter,
+                                                 new_column).values()),
                              dtype=np.float64)
     removed_columns = removed_columns[np.nonzero(removed_columns)]
     merged_column = merged_column[np.nonzero(merged_column)]
