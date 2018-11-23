@@ -15,18 +15,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+def _merge_columns_2D(counter, new_column):
+    """Implements ``_merge_columns`` for a matrix with >1 rows."""
+    merged = Counter()
+    for key in counter.keys():
+        (gt_column, old_column) = key
+        merged[(gt_column, new_column)] += counter[key]
+    return merged
+
+def _merge_columns_1D(counter, new_column):
+    """Implements ``_merge_columns`` for a row vector."""
+    merged = Counter()
+    for key in counter.keys():
+        merged[new_column] += counter[key]
+    return merged
+
 def _merge_columns(counter, new_column):
     """
     Creates new column with ID ``new_column`` containing sum of all columns of
     ``counter``.
     """
-    merged = Counter()
-    for key in counter.keys():
-        if isinstance(key, tuple):
-            (gt_column, old_column) = key
-            merged[(gt_column, new_column)] += counter[key]
-        else:
-            merged[new_column] += counter[key]
+    if isinstance(list(counter.keys())[0], tuple):
+        merged = _merge_columns_2D(counter, new_column)
+    else:
+        merged = _merge_columns_1D(counter, new_column)
     return merged
 
 def _removed_columns(counter, columns):
