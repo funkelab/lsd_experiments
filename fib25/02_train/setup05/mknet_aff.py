@@ -75,17 +75,21 @@ def create_network(input_shape, num_features, name, make_config=False):
         'input_shape': input_shape,
         'output_shape': output_shape,
         'lsd_setup': 'setup02',
-        'lsd_iteration': 200000
+        'lsd_iteration': 400000
         }
     with open(name + '_config.json', 'w') as f:
         json.dump(config, f)
     
     if make_config:
         config = {
+            'raw': raw.name,
+            'pretrained_lsd': pretrained_lsd.name,
             'embedding': embedding.name,
             'affs': affs.name,
+            'gt_embedding': gt_embedding.name,
             'gt_affs': gt_affs.name,
-            'affs_loss_weights': affs_loss_weights.name,
+            'loss_weights_embedding': loss_weights_embedding.name,
+            'loss_weights_affs': loss_weights_affs.name,
             'loss': loss.name,
             'optimizer': optimizer.name,
             'input_shape': input_shape,
