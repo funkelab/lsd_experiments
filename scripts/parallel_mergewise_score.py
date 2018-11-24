@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def _merge_columns_2D(counter, new_column):
+def _merged_columns_2D(counter, new_column):
     """Implements ``_merge_columns`` for a matrix with >1 rows."""
     merged = Counter()
     for key in counter.keys():
@@ -23,14 +23,14 @@ def _merge_columns_2D(counter, new_column):
         merged[(gt_column, new_column)] += counter[key]
     return merged
 
-def _merge_columns_1D(counter, new_column):
+def _merged_columns_1D(counter, new_column):
     """Implements ``_merge_columns`` for a row vector."""
     merged = Counter()
     for key in counter.keys():
         merged[new_column] += counter[key]
     return merged
 
-def _merge_columns(counter, new_column):
+def _merged_columns(counter, new_column):
     """
     Creates new column with ID ``new_column`` containing sum of all columns of
     ``counter``.
@@ -73,8 +73,8 @@ def _delta_entropy_col(counter, columns, total, new_column):
     removed_columns_counter = _removed_columns(counter, columns)
     removed_columns =  np.array(list(removed_columns_counter.values()),
                                 dtype=np.float64)
-    merged_column = np.array(list(_merge_columns(removed_columns_counter,
-                                                 new_column).values()),
+    merged_column = np.array(list(_merged_columns(removed_columns_counter,
+                                                  new_column).values()),
                              dtype=np.float64)
     removed_columns = removed_columns[np.nonzero(removed_columns)]
     merged_column = merged_column[np.nonzero(merged_column)]
