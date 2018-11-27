@@ -86,7 +86,7 @@ def _delta_entropy_col(counter, columns, total, new_column):
                                              total)
     else:
         entropy_to_remove = 0.0
-    if merged_columns.size > 0:
+    if merged_column.size > 0:
         entropy_to_add = entropy_in_chunk(merged_column,
                                           total)
     else:
