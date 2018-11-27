@@ -62,14 +62,14 @@ def contingencies_in_block(
     gt_seg_counts.append(partial_gt_seg_counts)
     totals.append(len(gt_seg_indices))
 
-def parallel_contingencies(seg_file,
-                           seg_dataset,
-                           gt_seg_file,
-                           gt_seg_dataset,
-                           total_roi,
-                           block_size,
-                           num_workers,
-                           retry):
+def parallel_contingencies_map(seg_file,
+                               seg_dataset,
+                               gt_seg_file,
+                               gt_seg_dataset,
+                               total_roi,
+                               block_size,
+                               num_workers,
+                               retry):
     """
     Constructs contingency table between a predicted segmentation and a ground
     truth segmentation blockwise in parallel. Returns sparse (CSC) matrices
