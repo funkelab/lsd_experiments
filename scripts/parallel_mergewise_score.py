@@ -68,29 +68,65 @@ def _removed_columns(counter, columns):
         removed = _removed_columns_1D(counter, columns)
     return removed
 
+def _update_columns_2D(counter, columns, new_column):
+    """Implements ``_update_columns`` for a matrix with >1 rows."""
+    removed = Counter()
+    merged = Counter()
+    for key in counter.keys():
+        if key[1] in columns:
+            (gt_column, old_column) = key
+            removed[key] += counter[key]
+            merged[(gt_column, new_column)] += counter[key]
+    return removed, merged
+
+def _update_columns_1D(counter, columns, new_column):
+    """Implements ``_update_columns`` for a row vector."""
+    removed = Counter()
+    merged = Counter()
+    for key in counter.keys():
+        if key in columns:
+            removed[key] += counter[key]
+            merged[new_column] += counter[key]
+    return removed, merged
+
+def _update_columns(counter, columns, new_column):
+    """
+    Returns removed columns and merged column of ``counter`` specified in
+    ``columns``.
+    """
+    if isinstance(list(counter.keys())[0], tuple):
+        removed, merged = _update_columns_2D(counter, columns, new_column)
+    else:
+        removed, merged = _update_columns_1D(counter, columns, new_column)
+
+    return removed, merged
+
 def _delta_entropy_col(counter, columns, total, new_column):
     """
     Returns change in entropy resulting from a merge of columns of ``counter``
     specified in ``columns``.
     """
     removed_columns_counter = _removed_columns(counter, columns)
-    removed_columns =  np.array(list(removed_columns_counter.values()),
+    removed_columns = np.array(list(removed_columns_counter.values()),
                                 dtype=np.float64)
     merged_column = np.array(list(_merged_columns(removed_columns_counter,
                                                   new_column).values()),
                              dtype=np.float64)
     removed_columns = removed_columns[np.nonzero(removed_columns)]
     merged_column = merged_column[np.nonzero(merged_column)]
+
     if removed_columns.size > 0:
         entropy_to_remove = entropy_in_chunk(removed_columns,
                                              total)
     else:
         entropy_to_remove = 0.0
+
     if merged_column.size > 0:
         entropy_to_add = entropy_in_chunk(merged_column,
                                           total)
     else:
         entropy_to_add = 0.0
+
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy_in_chunk(counter, components_in_chunk, chunk, num_components, total):
