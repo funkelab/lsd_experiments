@@ -39,9 +39,9 @@ def _merged_columns(counter, new_column):
     if len(keys) == 0:
         return Counter()
     if isinstance(keys[0], tuple):
-        merged = _merge_columns_2D(counter, new_column)
+        merged = _merged_columns_2D(counter, new_column)
     else:
-        merged = _merge_columns_1D(counter, new_column)
+        merged = _merged_columns_1D(counter, new_column)
     return merged
 
 def _removed_columns_2D(counter, columns):
