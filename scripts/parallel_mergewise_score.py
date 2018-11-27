@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse
 from sys import argv, exit
 from collections import Counter
-from parallel_contingencies_map import parallel_contingencies
+from parallel_contingencies_map import parallel_contingencies_map
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -130,11 +130,13 @@ def _delta_entropy_col(counter, columns, total, new_column):
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy_in_chunk(counter, components_in_chunk, chunk, num_components, total):
-    logger.info("Calculating entropy update for {0} merged components".format(len(components_in_chunk)))
+    logger.info("Calculating chunked update for {0} merged components".format(len(components_in_chunk)))
     delta = 0
     new_columns = range(*chunk.indices(num_components))
     for i, component in enumerate(components_in_chunk):
         delta += _delta_entropy_col(counter, component, total, new_columns[i])
+    logger.info("Update for {0} merged components is {1}".format(len(components_in_chunk), delta))
+    delta = 0
     return delta
 
 def delta_entropy(contingencies,
@@ -149,6 +151,8 @@ def delta_entropy(contingencies,
     fragments of each component in ``components``. This computation is
     performed in parallel with ``num_workers`` processes.
     """
+    logger.info("Calculating entropy update over {0} components".format(len(components)))
+    dask.config.set(scheduler='processes')
     components_chunks = create_chunk_slices(len(components), chunk_size)
     delayed_delta_H_contingencies = [dask.delayed(delta_entropy_in_chunk)(contingencies,
                                                                           components[chunk],
@@ -227,14 +231,14 @@ def parallel_mergewise_score(rag,
     (contingencies,
      fragment_counts,
      gt_seg_counts,
-     total) = parallel_contingencies(fragments_file,
-                                     fragments_dataset,
-                                     gt_seg_file,
-                                     gt_seg_dataset,
-                                     total_roi,
-                                     block_size,
-                                     num_workers,
-                                     retry)
+     total) = parallel_contingencies_map(fragments_file,
+                                         fragments_dataset,
+                                         gt_seg_file,
+                                         gt_seg_dataset,
+                                         total_roi,
+                                         block_size,
+                                         num_workers,
+                                         retry)
     
     logger.info("Calculating entropies for fragments")
     (H_contingencies, H_seg, H_gt_seg) = segmentation_entropies(contingencies,
