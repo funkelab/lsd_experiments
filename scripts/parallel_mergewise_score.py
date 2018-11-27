@@ -106,11 +106,10 @@ def _delta_entropy_col(counter, columns, total, new_column):
     Returns change in entropy resulting from a merge of columns of ``counter``
     specified in ``columns``.
     """
-    removed_columns_counter = _removed_columns(counter, columns)
-    removed_columns = np.array(list(removed_columns_counter.values()),
+    removed_counter, merged_counter = _update_columns(counter, columns, new_column)
+    removed_columns = np.array(list(removed_counter.values()),
                                 dtype=np.float64)
-    merged_column = np.array(list(_merged_columns(removed_columns_counter,
-                                                  new_column).values()),
+    merged_column = np.array(list(merged_counter.values()),
                              dtype=np.float64)
     removed_columns = removed_columns[np.nonzero(removed_columns)]
     merged_column = merged_column[np.nonzero(merged_column)]
