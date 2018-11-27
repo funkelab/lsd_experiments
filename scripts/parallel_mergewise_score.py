@@ -35,7 +35,10 @@ def _merged_columns(counter, new_column):
     Creates new column with ID ``new_column`` containing sum of all columns of
     ``counter``.
     """
-    if isinstance(list(counter.keys())[0], tuple):
+    keys = list(counter.keys())
+    if len(keys) == 0:
+        return Counter()
+    if isinstance(keys[0], tuple):
         merged = _merge_columns_2D(counter, new_column)
     else:
         merged = _merge_columns_1D(counter, new_column)
@@ -78,10 +81,16 @@ def _delta_entropy_col(counter, columns, total, new_column):
                              dtype=np.float64)
     removed_columns = removed_columns[np.nonzero(removed_columns)]
     merged_column = merged_column[np.nonzero(merged_column)]
-    entropy_to_remove = entropy_in_chunk(removed_columns,
-                                         total)
-    entropy_to_add = entropy_in_chunk(merged_column,
-                                      total)
+    if removed_columns.size > 0:
+        entropy_to_remove = entropy_in_chunk(removed_columns,
+                                             total)
+    else:
+        entropy_to_remove = 0.0
+    if merged_columns.size > 0:
+        entropy_to_add = entropy_in_chunk(merged_column,
+                                          total)
+    else:
+        entropy_to_add = 0.0
     return entropy_to_add - entropy_to_remove
 
 def delta_entropy_in_chunk(counter, components_in_chunk, chunk, num_components, total):
