@@ -15,59 +15,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def _merged_columns_2D(counter, new_column):
-    """Implements ``_merge_columns`` for a matrix with >1 rows."""
-    merged = Counter()
-    for key in counter.keys():
-        (gt_column, old_column) = key
-        merged[(gt_column, new_column)] += counter[key]
-    return merged
-
-def _merged_columns_1D(counter, new_column):
-    """Implements ``_merge_columns`` for a row vector."""
-    merged = Counter()
-    for key in counter.keys():
-        merged[new_column] += counter[key]
-    return merged
-
-def _merged_columns(counter, new_column):
-    """
-    Creates new column with ID ``new_column`` containing sum of all columns of
-    ``counter``.
-    """
-    keys = list(counter.keys())
-    if len(keys) == 0:
-        return Counter()
-    if isinstance(keys[0], tuple):
-        merged = _merged_columns_2D(counter, new_column)
-    else:
-        merged = _merged_columns_1D(counter, new_column)
-    return merged
-
-def _removed_columns_2D(counter, columns):
-    """Implements ``_removed_columns`` for a matrix with >1 rows."""
-    removed = Counter()
-    for key in counter.keys():
-        if key[1] in columns:
-            removed[key] += counter[key]
-    return removed
-
-def _removed_columns_1D(counter, columns):
-    """Implements ``_removed_columns`` for a row vector."""
-    removed = Counter()
-    for key in counter.keys():
-        if key in columns:
-            removed[key] += counter[key]
-    return removed
-
-def _removed_columns(counter, columns):
-    """Returns only columns of ``counter`` specified in ``columns``."""
-    if isinstance(list(counter.keys())[0], tuple):
-        removed = _removed_columns_2D(counter, columns)
-    else:
-        removed = _removed_columns_1D(counter, columns)
-    return removed
-
 def _update_columns_2D(counter, columns, new_column):
     """Implements ``_update_columns`` for a matrix with >1 rows."""
     removed = Counter()
