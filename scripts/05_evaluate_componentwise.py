@@ -67,7 +67,7 @@ def evaluate(gt_file,
         thresholds_minmax[1],
         thresholds_step))
 
-    scores = parallel_componenetwise_score(rag,
+    scores = parallel_componentwise_score(rag,
                                            fragments_file,
                                            fragments_dataset,
                                            gt_file,
