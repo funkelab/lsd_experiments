@@ -62,7 +62,7 @@ def contingencies_in_block(
     gt_seg_counts.append(partial_gt_seg_counts)
     totals.append(len(gt_seg_indices))
 
-def parallel_contingencies_map(seg_file,
+def parallel_contingencies_vol(seg_file,
                                seg_dataset,
                                gt_seg_file,
                                gt_seg_dataset,
