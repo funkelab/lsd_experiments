@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse
 from sys import argv, exit
 from collections import Counter
-from parallel_contingencies_map import parallel_contingencies_map
+from parallel_contingencies_vol import parallel_contingencies_vol
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ def parallel_mergewise_score(rag,
     (contingencies,
      fragment_counts,
      gt_seg_counts,
-     total) = parallel_contingencies_map(fragments_file,
+     total) = parallel_contingencies_vol(fragments_file,
                                          fragments_dataset,
                                          gt_seg_file,
                                          gt_seg_dataset,
