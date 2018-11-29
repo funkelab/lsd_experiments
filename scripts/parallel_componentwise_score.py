@@ -117,9 +117,6 @@ def parallel_componentwise_score(rag,
                                                             total,
                                                             chunk_size,
                                                             num_workers)
-    voi_split = H_contingencies - H_gt_seg
-    voi_merge = H_contingencies - H_seg
-    logger.info("Fragment VOI split: {0} VOI merge: {1}".format(voi_split, voi_merge))
 
     results = [] 
     for threshold in thresholds:
