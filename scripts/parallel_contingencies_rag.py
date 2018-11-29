@@ -1,6 +1,7 @@
 import dask
 import dask.multiprocessing
 import multiprocessing as mp
+import lsd
 import daisy
 import os
 import logging
@@ -49,7 +50,6 @@ def contingencies_in_block(
         fragments_map,
         contingencies,
         seg_counts,
-        gt_seg_counts,
         totals,
         ignore=[0]):
     """
@@ -80,12 +80,10 @@ def contingencies_in_block(
     not_ignored = np.isin(gt_seg_indices, ignore, invert=True)
     seg_indices = seg_indices[not_ignored]
     gt_seg_indices = gt_seg_indices[not_ignored]
-    seg_indices
     
     # construct maps of partial counts
     partial_contingencies = Counter([tuple(l) for l in np.stack([gt_seg_indices, seg_indices], axis=1).tolist()])
     partial_seg_counts = Counter(seg_indices.tolist())
-    partial_gt_seg_counts = Counter(gt_seg_indices.tolist())
 
     # append partial counts to shared memory lists
     contingencies.append(partial_contingencies)
@@ -156,7 +154,6 @@ def parallel_contingencies_rag(components,
     m = mp.Manager()
     blocked_contingencies = m.list()
     blocked_seg_counts = m.list()
-    blocked_gt_seg_counts = m.list()
     blocked_totals = m.list()
     
     logging.info("Constructing dictionary from fragments to components")
@@ -178,7 +175,6 @@ def parallel_contingencies_rag(components,
                 fragments_map,
                 blocked_contingencies,
                 blocked_seg_counts,
-                blocked_gt_seg_counts,
                 blocked_totals),
             fit='shrink',
             num_workers=num_workers,
@@ -194,13 +190,10 @@ def parallel_contingencies_rag(components,
     total = np.sum(np.uint64(blocked_totals))
     contingencies = Counter()
     seg_counts = Counter()
-    gt_seg_counts = Counter()
 
     for block in blocked_contingencies:
         contingencies += block
     for block in blocked_seg_counts:
         seg_counts += block
-    for block in blocked_gt_seg_counts:
-        gt_seg_counts += block
 
-    return (contingencies, seg_counts, gt_seg_counts, total)
+    return (contingencies, seg_counts, total)
