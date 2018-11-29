@@ -31,9 +31,9 @@ def create_chunk_slices(total_size, chunk_size):
     return [slice(i, min(i+chunk_size, total_size)) for i in range(0, total_size, chunk_size)]
 
 def gt_seg_entropies(gt_seg_counts,
-                       total,
-                       chunk_size,
-                       num_workers):
+                     total,
+                     chunk_size,
+                     num_workers):
     dask.config.set(scheduler='processes')
     gt_seg_counts_chunks = create_chunk_slices(len(gt_seg_counts), chunk_size)
     gt_seg_count_list = list(gt_seg_counts.values())
@@ -54,7 +54,6 @@ def segmentation_entropies(contingencies,
     dask.config.set(scheduler='processes')
     contingencies_chunks = create_chunk_slices(len(contingencies), chunk_size)
     seg_counts_chunks = create_chunk_slices(len(seg_counts), chunk_size)
-    gt_seg_counts_chunks = create_chunk_slices(len(gt_seg_counts), chunk_size)
     contingency_list = list(contingencies.values())
     seg_count_list = list(seg_counts.values())
 
@@ -96,9 +95,9 @@ def parallel_componentwise_score(rag,
     
     logger.info("Calculating entropies for ground truth")
     H_gt_seg = gt_seg_entropies(gt_seg_counts,
-                                  total,
-                                  chunk_size,
-                                  num_workers)
+                                total,
+                                chunk_size,
+                                num_workers)
 
     results = [] 
     for threshold in thresholds:
