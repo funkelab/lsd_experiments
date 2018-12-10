@@ -112,3 +112,123 @@ long range affs, euclidean + malis loss, larissa's unet, 6 fmul
 
 long range affs, euclidean + malis loss, mala unet, 6 fmul
 
+## setup28
+
+long range affs from lsds, euclidean loss, mala unet, 5 fmul
+
+## setup29
+
+long range affs from lsds, euclidean loss, larissa's unet, 6 fmul
+
+## setup30
+
+long range affs from lsds, euclidean loss, mala unet, 6 fmul
+
+## setup31
+
+long range affs from lsds, euclidean + malis loss, mala unet, 5 fmul
+
+## setup32
+
+long range affs from lsds, euclideam + malis loss, larissa's unet, 6 fmul
+
+## setup33
+
+long range affs from lsds, euclidean + malis loss, mala unet, 6 fmul
+
+## setup34
+
+long range affs + lsds, euclidean loss, mala unet, 5 fmul
+
+## setup35 
+
+long range affs + lsds, euclidean loss, larissa's unet, 6 fmul
+
+## setup36
+
+long range affs + lsds, euclidean loss, mala unet, 6 fmul
+
+## setup37
+
+long range affs + lsds, euclidean + malis loss, mala unet, 5 fmul
+
+## setup38
+
+long range affs + lsds, euclidean + malis loss, larissa's unet, 6 fmul
+
+## setup39
+
+long range affs + lsds, euclidean + malis loss, mala unet, 6 fmul
+
+## setup40
+
+affs + lsds from raw + lsds, euclidean loss, mala unet, 5 fmul
+
+## setup41
+
+affs + lsds from raw + lsds, eulcidean loss, larissa's unet, 6 fmul
+
+## setup42
+
+affs + lsds from raw + lsds, euclidean loss, mala unet, 6 fmul
+
+## setup43
+
+affs + lsds from raw + lsds, euclidean + malis loss, mala unet, 5 fmul
+
+## setup44
+
+affs + lsds from raw + lsds, euclidean + malis loss, larissa's unet, 6 fmul
+
+## setup45
+
+affs + lsds from raw + lsds, euclidean + malis loss, mala unet, 6 fmul
+
+## setup46
+
+long range affs + lsds from raw + lsds, euclidean loss, mala unet, 5 fmul
+
+## setup47
+
+long range affs + lsds from raw + lsds, euclidean loss, larissa's unet, 6 fmul
+
+## setup48
+
+long range affs + lsds from raw + lsds, euclidean loss, mala unet, 6 fmul
+
+## setup49
+
+long range affs + lsds from raw + lsds, euclidean + malis loss, mala unet, 5 fmul
+
+## setup50
+
+long range affs + lsds from raw + lsds, euclidean + malis loss, larissa's unet, 6 fmul
+
+## setup51
+
+long range affs + lsds from raw + lsds, euclidean + malis loss, larissa's unet, 6 fmul
+
+## setup52_f
+
+copy of setup34 with increased feature maps, full training volumes 
+
+## setup53_f 
+
+copy of setup40 with increased feature maps, full training volumes, lsds from setup02
+
+## setup54_f
+
+copy of setup46 with increased feature maps, full training volumes, lsds from setup02
+
+## setup55_g
+
+copy of setup04 - glial mask training on all 9 volumes (6 cremi, 3 scott's)
+
+## setup56_g
+
+copy of setup22 - glial mask training on all 9 volumes (6 cremi, 3 scott's)
+
+
+## setup57_g
+
+copy of setup52_f - glial mask training on all 9 volumes (6 cremi, 3 scott's)
