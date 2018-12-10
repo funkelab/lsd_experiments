@@ -11,7 +11,7 @@ def predict(iteration, in_file, read_roi, out_file):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-    with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
+    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -75,6 +75,7 @@ if __name__ == "__main__":
     read_roi = Roi(
         config['read_begin'],
         config['read_size'])
+
     predict(
         config['iteration'],
         config['raw_file'],
