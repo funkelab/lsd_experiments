@@ -39,7 +39,7 @@ def relabel_blocked_volume(volume, fragments_map, ignore=[0]):
         logger.debug("Finished relabeling {0} fragments".format(len(components)))
         return volume
     else:
-        logging.debug("Block {0} contains no relevant fragments".format(block.block_id))
+        logger.debug("Block {0} contains no relevant fragments".format(block.block_id))
         return volume
 
 def contingencies_in_block(
@@ -156,7 +156,7 @@ def parallel_contingencies_rag(components,
     blocked_seg_counts = m.list()
     blocked_totals = m.list()
     
-    logging.info("Constructing dictionary from fragments to components")
+    logger.info("Constructing dictionary from fragments to components")
     fragments_map = {fragment: i+1 for i, component in enumerate(components) for fragment in component}
     print(len(fragments_map))
 
