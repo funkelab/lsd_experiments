@@ -79,4 +79,4 @@ def create_network(input_shape, name, make_config=False):
 if __name__ == "__main__":
 
     create_network((164, 164, 164), 'train_net')
-    create_network((164, 164, 164), 'test_net', make_config=True)
+    create_network((248, 248, 248), 'test_net', make_config=True)
