@@ -232,3 +232,134 @@ copy of setup22 - glial mask training on all 9 volumes (6 cremi, 3 scott's)
 ## setup57_g
 
 copy of setup52_f - glial mask training on all 9 volumes (6 cremi, 3 scott's)
+
+# LSD paper setups
+
+## setup58_p
+
+vanilla affs, eucl loss, {A,B,C}, all labels, no autocontext
+
+## setup59_p
+
+vanilla affs, malis loss, {A,B,C}, all labels, no autocontext
+
+## setup60_p
+
+long range affs, {A,B,C}, all labels, no autocontext
+
+## setup61_p
+
+affs + lsds, {A,B,C}, all labels, no autocontext
+
+## setup62_p
+
+vanilla affs, eucl loss, {A,B,C,A+,B+,C+,0,1,2}, all labels, no autocontext
+
+## setup63_p
+
+vanilla affs, malis loss, {A,B,C,A+,B+,C+,0,1,2}, all labels, no autocontext
+
+## setup64_p
+
+long range affs, {A,B,C,A+,B+,C+,0,1,2}, all labels, no autocontext
+
+## setup65_p
+
+affs + lsds, {A,B,C,A+,B+,C+,0,1,2}, all labels, no autocontext
+
+## setup66_p
+
+vanilla affs, eucl loss, {A,B,C}, no glia, no autocontext
+
+## setup67_p
+
+vanilla affs, malis loss, {A,B,C}, no glia, no autocontext
+
+## setup68_p
+
+long range affs, {A,B,C}, no glia, no autocontext
+
+## setup69_p
+
+affs + lsds, {A,B,C}, no glia, no autocontext
+
+## setup70_p
+
+vanilla affs, eucl loss, {A,B,C,A+,B+,C+,0,1,2}, no glia, no autocontext
+
+## setup71_p
+
+vanilla affs, malis loss, {A,B,C,A+,B+,C+,0,1,2}, no glia, no autocontext
+
+## setup72_p
+
+long range affs, {A,B,C,A+,B+,C+,0,1,2}, no glia, no autocontext
+
+## setup73_p
+
+affs + lsds, {A,B,C,A+,B+,C+,0,1,2}, no glia, no autocontext
+
+## setup74_p
+
+vanilla affs, eucl loss, {A,B,C}, all labels, autocontext
+
+## setup75_p
+
+vanilla affs, malis loss, {A,B,C}, all labels, autocontext
+
+## setup76_p
+
+long range affs, {A,B,C}, all labels, autocontext
+
+## setup77_p
+
+affs + lsds, {A,B,C}, all labels, autocontext
+
+## setup78_p
+
+vanilla affs, eucl loss, {A,B,C,A+,B+,C+,0,1,2}, all labels, autocontext
+
+## setup79_p
+
+vanilla affs, malis loss, {A,B,C,A+,B+,C+,0,1,2}, all labels, autocontext
+
+## setup80_p
+
+long range affs, {A,B,C,A+,B+,C+,0,1,2}, all labels, autocontext
+
+## setup81_p
+
+affs + lsds, {A,B,C,A+,B+,C+,0,1,2}, all labels, autocontext
+
+## setup82_p
+
+vanilla affs, eucl loss, {A,B,C}, no glia, autocontext
+
+## setup83_p
+
+vanilla affs, malis loss, {A,B,C}, no glia, autocontext
+
+## setup84_p
+
+long range affs, {A,B,C}, no glia, autocontext
+
+## setup85_p
+
+affs + lsds, {A,B,C}, no glia, autocontext
+
+## setup86_p
+
+vanilla affs, eucl loss, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
+
+## setup87_p
+
+vanilla affs, malis loss, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
+
+## setup88_p
+
+long range affs, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
+
+## setup89_p
+
+affs + lsds, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
+
