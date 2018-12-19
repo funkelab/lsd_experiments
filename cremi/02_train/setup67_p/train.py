@@ -206,7 +206,7 @@ def train_until(max_iteration):
         train_optimizer = add_malis_loss
         train_inputs['gt_seg:0'] = labels
         train_inputs['gt_affs_mask:0'] = gt_affs_mask
-        train_summary = 'setup13_malis_loss:0'
+        train_summary = 'setup67_malis_loss:0'
 
     train_pipeline += Train(
             'train_net',
