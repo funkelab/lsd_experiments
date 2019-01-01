@@ -363,3 +363,114 @@ long range affs, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
 
 affs + lsds, {A,B,C,A+,B+,C+,0,1,2}, no glia, autocontext
 
+## setup90_p
+
+lsds for setup77_p (see setup02 + setup40 for reference)
+
+## setup91_p
+
+lsds for setup81_p
+
+## setup92_p
+
+lsds for setup85_p
+
+## setup93_p 
+
+lsds for setup89_p
+
+## setup94_p
+
+copy of setup62_p using 6 data samples {A,B,C,0,1,2}
+
+## setup95_p
+
+copy of setup63_p using 6 data samples {A,B,C,0,1,2}
+
+## setup96_p
+
+copy of setup64_p using 6 data samples {A,B,C,0,1,2}
+
+## setup97_p
+
+copy of setup65_p using 6 data samples {A,B,C,0,1,2}
+
+## setup98_p
+
+copy of setup70_p using 6 data samples {A,B,C,0,1,2}
+
+## setup99_p
+
+copy of setup71_p using 6 data samples {A,B,C,0,1,2}
+
+## setup100_p
+
+copy of setup72_p using 6 data samples {A,B,C,0,1,2}
+
+## setup101_p
+
+copy of setup73_p using 6 data samples {A,B,C,0,1,2}
+
+## setup102_p
+
+copy of setup78_p using 6 data samples {A,B,C,0,1,2}
+
+## setup103_p
+
+copy of setup79_p using 6 data samples {A,B,C,0,1,2}
+
+## setup104_p
+
+copy of setup80_p using 6 data samples {A,B,C,0,1,2}
+
+## setup105_p
+
+copy of setup81_p using 6 data samples {A,B,C,0,1,2}
+
+## setup106_p
+
+copy of setup86_p using 6 data samples {A,B,C,0,1,2}
+
+## setup107_p
+
+copy of setup87_p using 6 data samples {A,B,C,0,1,2}
+
+## setup108_p
+
+copy of setup88_p using 6 data samples {A,B,C,0,1,2}
+
+## setup109_p
+
+copy of setup89_p using 6 data samples {A,B,C,0,1,2}
+
+## setup110_p
+
+copy of setup91_p using 6 data samples {A,B,C,0,1,2}
+
+## setup111_p
+
+copy of setup93_p using 6 data samples {A,B,C,0,1,2}
+
+## setup112_p
+
+copy of setup77_p using 14 fmaps out in unet
+
+## setup113_p
+
+copy of setup81_p using 14 fmaps out in unet
+
+## setup114_p
+
+copy of setup85_p using 14 fmaps out in unet
+
+## setup115_p
+
+copy of setup89_p using 14 fmaps out in unet
+
+## setup116_p
+
+copy of setup105_p using 14 fmaps out in unet
+
+## setup117_p
+
+copy of setup109_p using 14 fmaps out in unet
