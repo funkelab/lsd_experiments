@@ -75,8 +75,8 @@ def create_network(input_shape, name):
 
 if __name__ == "__main__":
 
-    z=3
-    xy=27
+    z=0
+    xy=0
 
     create_network((84, 268, 268), 'train_lsd_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         config = json.load(f)
     config.update({
         'out_dims': 10,
-        'out_dtype': 'float32'
+        'out_dtype': 'uint8'
     })
     with open('config.json', 'w') as f:
         json.dump(config, f)
