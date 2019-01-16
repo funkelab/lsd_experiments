@@ -26,7 +26,7 @@ output_size = output_shape*voxel_size
 
 def predict(
         iteration,
-        in_file,
+        raw_file,
         raw_dataset,
         read_roi,
         out_file,
@@ -41,7 +41,7 @@ def predict(
 
     pipeline = (
         ZarrSource(
-            in_file,
+            raw_file,
             datasets = {
                 raw: raw_dataset
             },
@@ -98,8 +98,8 @@ if __name__ == "__main__":
 
     predict(
         run_config['iteration'],
-        run_config['in_file'],
-        run_config['in_dataset'],
+        run_config['raw_file'],
+        run_config['raw_dataset'],
         read_roi,
         run_config['out_file'],
         run_config['out_dataset'])
