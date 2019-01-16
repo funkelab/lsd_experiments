@@ -268,22 +268,6 @@ def predict_worker(
     # os.remove(log_out)
     # os.remove(log_err)
 
-# def check_block(out_file, out_dataset, block):
-
-    # print("Checking if block %s is complete..."%block.write_roi)
-
-    # ds = daisy.open_ds(out_file, out_dataset)
-
-    # if ds.roi.intersect(block.write_roi).empty():
-        # print("Block outside of output ROI")
-        # return True
-
-    # center_values = ds[block.write_roi.get_begin()]
-    # s = np.sum(center_values)
-    # print("Sum of center values in %s is %f"%(block.write_roi, s))
-
-    # return s != 0
-
 def check_block(blocks_predicted, block):
 
     print("Checking if block %s is complete..."%block.write_roi)
