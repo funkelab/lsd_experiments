@@ -256,6 +256,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)
