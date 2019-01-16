@@ -93,10 +93,6 @@ def predict_blockwise(
         print("Reading setup config from %s"%os.path.join(setup, 'config.json'))
         net_config = json.load(f)
 
-    # client = MongoClient(db_host)
-    # database = client[db_name]
-    # stats = database['stats']
-
     out_dims = net_config['out_dims']
     out_dtype = net_config['out_dtype']
     print('Number of dimensions is %i'%out_dims)
