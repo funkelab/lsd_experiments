@@ -55,7 +55,7 @@ def predict(
         Normalize(raw) +
         IntensityScaleShift(raw, 2,-1) +
         Predict(
-            os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            os.path.join(setup_dir, 'train_lsd_net_checkpoint_%d'%iteration),
             inputs={
                 net_config['raw']: raw
             },
