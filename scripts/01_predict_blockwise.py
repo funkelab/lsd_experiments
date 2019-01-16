@@ -5,6 +5,9 @@ import numpy as np
 import os
 import daisy
 import sys
+import time
+import datetime
+import pymongo
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('daisy.blocks').setLevel(logging.DEBUG)
@@ -15,12 +18,15 @@ def predict_blockwise(
         iteration,
         raw_file,
         raw_dataset,
-        lsds_file,
-        lsds_dataset,
         out_file,
         out_dataset,
-        block_size_in_chunks,
-        num_workers):
+        num_workers,
+        db_host,
+        db_name,
+        collection='blocks_predicted',
+        lsds_file=None,
+        lsds_dataset=None):
+
     '''Run prediction in parallel blocks. Within blocks, predict in chunks.
 
     Args:
@@ -64,10 +70,10 @@ def predict_blockwise(
     train_dir = os.path.join(experiment_dir, '02_train')
     network_dir = os.path.join(setup, str(iteration))
 
-    setup = os.path.abspath(os.path.join(train_dir, setup))
-
     raw_file = os.path.abspath(raw_file)
-    out_file = os.path.abspath(out_file)
+    out_file = os.path.abspath(os.path.join(out_file, setup, str(iteration), 'calyx.zarr'))
+
+    setup = os.path.abspath(os.path.join(train_dir, setup))
 
     print('Input file path: ', raw_file)
     print('Output file path: ', out_file)
@@ -77,8 +83,8 @@ def predict_blockwise(
     try:
         source = daisy.open_ds(raw_file, raw_dataset)
     except:
-        in_dataset = in_dataset + '/s0'
-        source = daisy.open_ds(in_file, in_dataset)
+        in_dataset = raw_dataset + '/s0'
+        source = daisy.open_ds(raw_file, in_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
@@ -87,6 +93,10 @@ def predict_blockwise(
         print("Reading setup config from %s"%os.path.join(setup, 'config.json'))
         net_config = json.load(f)
 
+    # client = MongoClient(db_host)
+    # database = client[db_name]
+    # stats = database['stats']
+
     out_dims = net_config['out_dims']
     out_dtype = net_config['out_dtype']
     print('Number of dimensions is %i'%out_dims)
@@ -94,31 +104,27 @@ def predict_blockwise(
     # get chunk size and context
     net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
     net_output_size = daisy.Coordinate(net_config['output_shape'])*source.voxel_size
-    chunk_size = net_output_size
     context = (net_input_size - net_output_size)/2
+
+    # get total input and output ROIs
+    input_roi = source.roi.grow(context, context)
+    output_roi = source.roi
 
     print("Following sizes in world units:")
     print("net input size  = %s"%(net_input_size,))
     print("net output size = %s"%(net_output_size,))
     print("context         = %s"%(context,))
 
-    # compute sizes of blocks
-    block_output_size = chunk_size*tuple(block_size_in_chunks)
-    block_input_size = block_output_size + context*2
-
-    # get total input and output ROIs
-    input_roi = source.roi.grow(context, context)
-    output_roi = source.roi
 
     # create read and write ROI
-    block_read_roi = daisy.Roi((0, 0, 0), block_input_size) - context
-    block_write_roi = daisy.Roi((0, 0, 0), block_output_size)
+    block_read_roi = daisy.Roi((0, 0, 0), net_input_size) - context
+    block_write_roi = daisy.Roi((0, 0, 0), net_output_size)
 
     print("Following ROIs in world units:")
-    print("Total input ROI  = %s"%input_roi)
     print("Block read  ROI  = %s"%block_read_roi)
     print("Block write ROI  = %s"%block_write_roi)
-    print("Total output ROI = %s"%output_roi)
+    print("Total input  ROI  = %s"%input_roi)
+    print("Total output ROI  = %s"%output_roi)
 
     logging.info('Preparing output dataset')
     print("Preparing output dataset...")
@@ -129,22 +135,32 @@ def predict_blockwise(
         output_roi,
         source.voxel_size,
         out_dtype,
-        write_roi=daisy.Roi((0, 0, 0), chunk_size),
+        write_roi=block_write_roi,
         num_channels=out_dims,
         # temporary fix until
         # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
         # (we want gzip to be the default)
-        compressor={'id': 'zlib', 'level':5}
+        compressor={'id': 'gzip', 'level':5}
         )
 
     print("Starting block-wise processing...")
+
+    client = pymongo.MongoClient(db_host)
+    db = client[db_name]
+    if collection not in db.list_collection_names():
+        blocks_predicted = db[collection]
+        blocks_predicted.create_index(
+            [('block_id', pymongo.ASCENDING)],
+            name='block_id')
+    else:
+        blocks_predicted = db[collection]
 
     # process block-wise
     succeeded = daisy.run_blockwise(
         input_roi,
         block_read_roi,
         block_write_roi,
-        process_function=lambda b: predict_in_block(
+        process_function=lambda: predict_worker(
             experiment,
             setup,
             iteration,
@@ -154,17 +170,20 @@ def predict_blockwise(
             lsds_dataset,
             out_file,
             out_dataset,
+            db_host,
+            db_name,
+            collection),
+        check_function=lambda b: check_block(
+            blocks_predicted,
             b),
-        check_function=lambda b: check_block(out_file, out_dataset, b),
         num_workers=num_workers,
-        processes=False,
         read_write_conflict=False,
         fit='overhang')
 
     if not succeeded:
         raise RuntimeError("Prediction failed for (at least) one block")
 
-def predict_in_block(
+def predict_worker(
         experiment,
         setup,
         iteration,
@@ -174,42 +193,42 @@ def predict_in_block(
         lsds_dataset,
         out_file,
         out_dataset,
-        block):
+        db_host,
+        db_name,
+        collection):
 
     setup_dir = os.path.join('..', experiment, '02_train', setup)
-    predict_script = os.path.abspath(os.path.join(setup_dir, 'predict.py'))
-
-    read_roi = block.read_roi
-    write_roi = block.write_roi
-
-    print("Predicting in %s"%write_roi)
+    predict_script = os.path.abspath(os.path.join(setup_dir, 'predict_newdaisy.py'))
 
     if raw_file.endswith('.json'):
         with open(raw_file, 'r') as f:
             spec = json.load(f)
             raw_file = spec['container']
 
+    worker_config = {
+        'queue': 'gpu_tesla',
+        'num_cpus': 5,
+        'num_cache_workers': 10,
+        'singularity': None # TODO: use 'funkey/lsd:v0.7'
+    }
+
     config = {
-        'experiment': experiment,
-        'setup': setup,
         'iteration': iteration,
         'raw_file': raw_file,
         'raw_dataset': raw_dataset,
         'lsds_file': lsds_file,
         'lsds_dataset': lsds_dataset,
-        'read_begin': read_roi.get_begin(),
-        'read_size': read_roi.get_shape(),
         'out_file': out_file,
         'out_dataset': out_dataset,
-        'write_begin': write_roi.get_begin(),
-        'write_size': write_roi.get_shape()
+        'db_host': db_host,
+        'db_name': db_name,
+        'collection': collection,
+        'worker_config': worker_config
     }
 
     # get a unique hash for this configuration
     config_str = ''.join(['%s'%(v,) for v in config.values()])
     config_hash = abs(int(hashlib.md5(config_str.encode()).hexdigest(), 16))
-
-    print("Hash for block at %s is %d"%(write_roi, config_hash))
 
     try:
         os.makedirs('.predict_configs')
@@ -223,40 +242,57 @@ def predict_in_block(
 
     print("Running block with config %s..."%config_file)
 
-    daisy.call([
+    command = [
         'run_lsf',
-        '-c', '5',
+        '-c', str(worker_config['num_cpus']),
         '-g', '1',
-        '-d', 'funkey/lsd:v0.6',
+        '-q', worker_config['queue']
+    ]
+
+    if worker_config['singularity']:
+        command += ['-s', worker_config['singularity']]
+
+    command += [
         'python -u %s %s'%(
             predict_script,
             config_file
-        )],
-        log_out=log_out,
-        log_err=log_err)
+        )]
 
-    print("Finished block with config %s..."%config_file)
+    daisy.call(command, log_out=log_out, log_err=log_err)
+
+    logging.info('Predict worker finished')
+
 
     # # if things went well, remove temporary files
     # os.remove(config_file)
     # os.remove(log_out)
     # os.remove(log_err)
 
-def check_block(out_file, out_dataset, block):
+# def check_block(out_file, out_dataset, block):
+
+    # print("Checking if block %s is complete..."%block.write_roi)
+
+    # ds = daisy.open_ds(out_file, out_dataset)
+
+    # if ds.roi.intersect(block.write_roi).empty():
+        # print("Block outside of output ROI")
+        # return True
+
+    # center_values = ds[block.write_roi.get_begin()]
+    # s = np.sum(center_values)
+    # print("Sum of center values in %s is %f"%(block.write_roi, s))
+
+    # return s != 0
+
+def check_block(blocks_predicted, block):
 
     print("Checking if block %s is complete..."%block.write_roi)
 
-    ds = daisy.open_ds(out_file, out_dataset)
+    done = blocks_predicted.count({'block_id': block.block_id}) >= 1
 
-    if ds.roi.intersect(block.write_roi).empty():
-        print("Block outside of output ROI")
-        return True
+    print("Block %s is %s" % (block, "done" if done else "NOT done"))
 
-    center_values = ds[block.write_roi.get_begin()]
-    s = np.sum(center_values)
-    print("Sum of center values in %s is %f"%(block.write_roi, s))
-
-    return s != 0
+    return done
 
 if __name__ == "__main__":
 
@@ -265,4 +301,12 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         config = json.load(f)
 
+    start = time.time()
+    
     predict_blockwise(**config)
+
+    end = time.time()
+    
+    seconds = end - start
+    print('Total time to predict: %f seconds' % seconds)
+
