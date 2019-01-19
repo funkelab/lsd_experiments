@@ -1,13 +1,15 @@
+import daisy
 import json
 import logging
 import lsd
-import os
-import daisy
 import sys
+import time
 from parallel_read_rag import parallel_read_rag
+from parallel_relabel import parallel_relabel
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.mongodb_rag_provider').setLevel(logging.DEBUG)
+logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
 
 def extract_segmentation(
         fragments_file,
@@ -20,7 +22,8 @@ def extract_segmentation(
         threshold,
         roi_offset=None,
         roi_shape=None,
-        num_workers=1):
+        num_workers=1,
+        **kwargs):
 
     # open fragments
     fragments = daisy.open_ds(fragments_file, fragments_dataset)
@@ -40,6 +43,7 @@ def extract_segmentation(
 
     # slice
     print("Reading fragments and RAG in %s"%total_roi)
+    start = time.time()
     fragments = fragments[total_roi]
     rag = parallel_read_rag(
         total_roi,
@@ -49,28 +53,33 @@ def extract_segmentation(
         block_size=(4096, 4096, 4096),
         num_workers=num_workers,
         retry=0)
+    print("%.3fs"%(time.time() - start))
 
     print("Number of nodes in RAG: %d"%(len(rag.nodes())))
     print("Number of edges in RAG: %d"%(len(rag.edges())))
 
     # create a segmentation
     print("Merging...")
-    segmentation_data = fragments.to_ndarray()
-    rag.get_segmentation(threshold, segmentation_data)
+    start = time.time()
+    components = rag.get_connected_components(threshold)
+    print("%.3fs"%(time.time() - start))
 
-    # store segmentation
+    print("Constructing dictionary from fragments to segments")
+    fragments_map = {fragment: component[0] for component in components for fragment in component}
+
     print("Writing segmentation...")
-    segmentation = daisy.prepare_ds(
-        out_file,
-        out_dataset,
-        fragments.roi,
-        fragments.voxel_size,
-        fragments.data.dtype,
-        # temporary fix until
-        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
-        # (we want gzip to be the default)
-        compressor={'id': 'zlib', 'level':5})
-    segmentation.data[:] = segmentation_data
+    start = time.time()
+    parallel_relabel(
+        fragments_map,
+        fragments_file,
+        fragments_dataset,
+        total_roi,
+        block_size=(4080, 4096, 4096),
+        seg_file=out_file,
+        seg_dataset=out_dataset,
+        num_workers=num_workers,
+        retry=0)
+    print("%.3fs"%(time.time() - start))
 
 if __name__ == "__main__":
 
