@@ -44,7 +44,7 @@ def dump_graph_in_block(block, rag_provider):
     nodes = np.array([
         node['id']
         for node in nodes
-    ])
+    ], dtype=np.uint64)
 
     np.save('calyx_dump/edges_%d.npy'%block.block_id, edges)
     np.save('calyx_dump/scores_%d.npy'%block.block_id, scores)
@@ -62,8 +62,8 @@ def dump(
         db_host,
         db_name,
         edges_collection,
-        roi_offset=None,
-        roi_shape=None,
+        roi_offset,
+        roi_shape,
         num_workers=1,
         retry=0,
         **kwargs):
