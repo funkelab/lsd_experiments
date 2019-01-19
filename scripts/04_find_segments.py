@@ -7,9 +7,44 @@ import time
 import glob
 import numpy as np
 from pymongo import MongoClient, ASCENDING
+from pymongo.errors import BulkWriteError
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
+logging.getLogger('daisy.persistence.shared_graph_provider').setLevel(logging.DEBUG)
+
+def read_graph_from_dump(dump_dir):
+
+    edge_files = sorted(glob.glob(dump_dir + '/edges_*.npy'))
+    print("Found %d edge files"%len(edge_files))
+
+    start = time.time()
+    edges = np.concatenate([
+        np.load(edge_file)
+        for edge_file in edge_files
+    ]).astype(np.uint64)
+    print("Read all edges in %.3fs"%(time.time() - start))
+
+    score_files = sorted(glob.glob(dump_dir + '/scores_*.npy'))
+    print("Found %d score files"%len(score_files))
+
+    start = time.time()
+    scores = np.concatenate([
+        np.load(score_file)
+        for score_file in score_files
+    ]).astype(np.float32)
+    print("Read all scores in %.3fs"%(time.time() - start))
+
+    node_files = sorted(glob.glob(dump_dir + '/nodes_*.npy'))
+    print("Found %d node files"%len(node_files))
+
+    start = time.time()
+    nodes = np.concatenate([
+        np.load(node_file)
+        for node_file in node_files
+    ]).astype(np.uint64)
+    print("Read all nodes in %.3fs"%(time.time() - start))
+
+    return (nodes, edges, scores)
 
 def store_fragseg_lut(
         db_host,
@@ -43,45 +78,44 @@ def store_fragseg_lut(
         print(e.details)
         raise e
 
-def extract_segmentation(
+def find_segments(
         db_host,
         db_name,
         edges_collection,
         thresholds,
-        roi_offset=None,
-        roi_shape=None,
-        num_workers=1,
         **kwargs):
 
-    edge_files = glob.glob('calyx_dump/edges_*.npy')
-    print("Found %d edge files"%len(edge_files))
+    if 'dump_dir' in kwargs:
 
-    start = time.time()
-    edges = np.concatenate([
-        np.load(edge_file)
-        for edge_file in edge_files
-    ])
-    print("Read all edges in %.3fs"%(time.time() - start))
+        print("Reading graph from dump in ", kwargs['dump_dir'])
+        nodes, edges, scores = read_graph_from_dump(kwargs['dump_dir'])
 
-    score_files = glob.glob('calyx_dump/scores_*.npy')
-    print("Found %d score files"%len(score_files))
+    else:
 
-    start = time.time()
-    scores = np.concatenate([
-        np.load(score_file)
-        for score_file in score_files
-    ])
-    print("Read all scores in %.3fs"%(time.time() - start))
+        print("Reading graph from DB ", db_name, edges_collection)
+        start = time.time()
 
-    node_files = glob.glob('calyx_dump/nodes_*.csv')
-    print("Found %d node files"%len(node_files))
+        graph_provider = daisy.persistence.MongoDbGraphProvider(
+            db_name,
+            db_host,
+            edges_collection=edges_collection,
+            position_attribute=[
+                'center_z',
+                'center_y',
+                'center_x'])
 
-    start = time.time()
-    nodes = np.concatenate([
-        np.load(node_file)
-        for node_file in node_files
-    ])
-    print("Read all nodes in %.3fs"%(time.time() - start))
+        node_attrs, edge_attrs = graph_provider.read_blockwise(
+            daisy.Roi(
+                kwargs['roi_offset'],
+                kwargs['roi_shape']),
+            block_size=daisy.Coordinate((4096, 4096, 4096)),
+            num_workers=kwargs['num_workers'])
+
+        print("Read graph in %.3fs"%(time.time() - start))
+
+        nodes = node_attrs['id']
+        edges = np.stack([edge_attrs['u'], edge_attrs['v']], axis=1)
+        scores = edge_attrs['merge_score']
 
     print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
 
@@ -103,14 +137,16 @@ def extract_segmentation(
         ])
         print("%.3fs"%(time.time() - start))
 
-        print("Storing fragment-segment LUT...")
-        start = time.time()
-        store_fragseg_lut(
-            db_host,
-            db_name,
-            'seg_%s_%d'%(edges_collection,int(threshold*100)),
-            lut)
-        print("%.3fs"%(time.time() - start))
+        # DEBUG: commented out for dry run:
+
+        # print("Storing fragment-segment LUT...")
+        # start = time.time()
+        # store_fragseg_lut(
+            # db_host,
+            # db_name,
+            # 'seg_%s_%d'%(edges_collection,int(threshold*100)),
+            # lut)
+        # print("%.3fs"%(time.time() - start))
 
 if __name__ == "__main__":
 
@@ -119,4 +155,4 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         config = json.load(f)
 
-    extract_segmentation(**config)
+    find_segments(**config)
