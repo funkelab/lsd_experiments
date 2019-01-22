@@ -100,7 +100,7 @@ def agglomerate(
 
 def start_worker(config_file, queue):
 
-    worker_id = daisy.Context.from_env().actor_id
+    worker_id = daisy.Context.from_env().worker_id
 
     try:
         os.makedirs('.agglomerate_blockwise')
@@ -115,8 +115,8 @@ def start_worker(config_file, queue):
         '-c', '5',
         '-g', '0',
         '-q', queue,
-        '-s', 'funkey/lsd:v0.8_test',
-        'python', './03_agglomerate_blockwise_newdaisy.py', sys.argv[1],
+        '-s', 'funkey/lsd:v0.8',
+        'python', './03_agglomerate_blockwise.py', sys.argv[1],
         '--run_worker'],
         log_out=log_out,
         log_err=log_err)
@@ -179,7 +179,7 @@ def agglomerate_worker(
     db = client[db_name]
     blocks_agglomerated = db['blocks_agglomerated']
 
-    client = daisy.ClientScheduler()
+    client = daisy.Client()
 
     while True:
 

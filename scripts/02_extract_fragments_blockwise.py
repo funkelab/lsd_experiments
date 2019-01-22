@@ -102,7 +102,7 @@ def extract_fragments(
 
 def start_worker(config_file, queue):
 
-    worker_id = daisy.Context.from_env().actor_id
+    worker_id = daisy.Context.from_env().worker_id
 
     try:
         os.makedirs('.extract_fragments_blockwise')
@@ -194,7 +194,7 @@ def extract_fragments_worker(
     db = client[db_name]
     blocks_extracted = db['blocks_extracted']
 
-    client = daisy.ClientScheduler()
+    client = daisy.Client()
 
     while True:
 
