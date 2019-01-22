@@ -100,7 +100,7 @@ def train_until(max_iteration):
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
-            num_workers=28) +
+            num_workers=16) +
         Train(
             'train_net',
             optimizer=config['optimizer'],

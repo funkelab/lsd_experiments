@@ -105,9 +105,9 @@ def train_until(max_iteration):
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
-            num_workers=16) +
+            num_workers=10) +
         Predict(
-            checkpoint='../setup02_tmp/train_net_checkpoint_400000',
+            checkpoint='../setup02_tmp/train_net_checkpoint_200000',
             graph='lsd_net.meta',
             inputs={
                 lsd_config['raw']: raw

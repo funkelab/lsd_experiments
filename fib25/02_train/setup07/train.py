@@ -1,13 +1,12 @@
 from __future__ import print_function
 import sys
-import logging
 from gunpowder import *
 from gunpowder.tensorflow import *
-from mala.gunpowder import AddLocalShapeDescriptor
 import malis
 import os
 import math
 import json
+import logging
 import tensorflow as tf
 import numpy as np
 
@@ -30,29 +29,36 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net_config.json', 'r') as f:
-        config = json.load(f)
-
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    embedding = ArrayKey('PREDICTED_EMBEDDING')
+    embedding = ArrayKey('EMBEDDING')
+    affs = ArrayKey('PREDICTED_AFFS')
     gt = ArrayKey('GT_AFFINITIES')
+    gt_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
 
+    with open('lsd_net_config.json', 'r') as f:
+        lsd_config = json.load(f)
+    with open('train_net_config.json', 'r') as f:
+        affs_config = json.load(f)
+
     voxel_size = Coordinate((8,8,8))
-    input_size = Coordinate(config['input_shape'])*voxel_size
-    output_size = Coordinate(config['output_shape'])*voxel_size
+    input_size = Coordinate(lsd_config['input_shape'])*voxel_size
+    embedding_size = Coordinate(affs_config['input_shape'])*voxel_size
+    output_size = Coordinate(affs_config['output_shape'])*voxel_size
 
     request = BatchRequest()
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
+    request.add(embedding, embedding_size)
     request.add(gt, output_size)
+    request.add(gt_mask, output_size)
     request.add(gt_scale, output_size)
 
     snapshot_request = BatchRequest({
-        embedding: request[gt],
+        affs: request[gt],
     })
 
     data_sources = tuple(
@@ -86,41 +92,55 @@ def train_until(max_iteration):
         SimpleAugment() +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
-        AddLocalShapeDescriptor(
-            labels,
+        AddAffinities(
+            [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            labels=labels,
+            affinities=gt,
+            labels_mask=labels_mask,
+            affinities_mask=gt_mask) +
+        BalanceLabels(
             gt,
-            mask=gt_scale,
-            sigma=80,
-            downsample=2) +
+            gt_scale,
+            gt_mask) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
             num_workers=10) +
-        Train(
-            'train_net',
-            optimizer=config['optimizer'],
-            loss=config['loss'],
+        Predict(
+            checkpoint='../setup02_tmp/train_net_checkpoint_400000',
+            graph='lsd_net.meta',
             inputs={
-                config['raw']: raw,
-                config['gt_embedding']: gt,
-                config['embedding_loss_weights']: gt_scale,
+                lsd_config['raw']: raw
             },
             outputs={
-                config['embedding']: embedding
+                lsd_config['embedding']: embedding
+            }) +
+        Train(
+            'train_net',
+            optimizer=affs_config['optimizer'],
+            loss=affs_config['loss'],
+            inputs={
+                affs_config['embedding']: embedding,
+                affs_config['gt_affs']: gt,
+                affs_config['affs_loss_weights']: gt_scale,
+            },
+            outputs={
+                affs_config['affs']: affs
             },
             gradients={},
-            save_every=10000) +
+            save_every=100000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
+                embedding: 'volumes/embedding',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_embedding',
-                embedding: 'volumes/labels/pred_embedding',
+                gt: 'volumes/labels/gt_affinities',
+                affs: 'volumes/labels/pred_affinities',
             },
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=10000,
+            every=100000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -133,6 +153,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    # set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)

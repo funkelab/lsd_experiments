@@ -167,7 +167,7 @@ def train_until(max_iteration):
         train_optimizer = add_malis_loss
         train_inputs['gt_seg:0'] = labels
         train_inputs['gt_affs_mask:0'] = gt_affs_mask
-        train_summary = 'setup13_malis_loss:0'
+        train_summary = 'setup06_malis_loss:0'
 
     train_pipeline += Train(
             'train_net',
@@ -182,7 +182,7 @@ def train_until(max_iteration):
             },
             summary=train_summary,
             log_dir='log', 
-            save_every=10000)
+            save_every=100000)
 
     train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
     train_pipeline += Snapshot({
@@ -197,7 +197,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=1000,
+            every=100000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request)
 

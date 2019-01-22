@@ -22,7 +22,7 @@ samples = [
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'affs_net_config.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'train_affs_net.json'), 'r') as f:
     aff_net_config = json.load(f)
 
 experiment_dir = os.path.join(setup_dir, '..', '..')
@@ -42,10 +42,10 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net_config.json', 'r') as f:
+    with open('train_affs_net.json', 'r') as f:
         context_config = json.load(f)
         
-    with open('lsd_net_config.json', 'r') as f:
+    with open('train_lsd_net.json', 'r') as f:
         sd_config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -199,8 +199,8 @@ def train_until(max_iteration):
         Predict(
             checkpoint=os.path.join(
                 lsd_setup_dir,
-                'train_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
-            graph='lsd_net.meta',
+                'train_lsd_net_checkpoint_%d'%aff_net_config['lsd_iteration']),
+            graph='train_lsd_net.meta',
             inputs={
                 sd_config['raw']: raw
             },
@@ -208,7 +208,7 @@ def train_until(max_iteration):
                 sd_config['embedding']: pretrained_lsd
             }) +
         Train(
-            'train_net',
+            'train_affs_net',
             optimizer=context_config['optimizer'],
             loss=context_config['loss'],
             inputs={

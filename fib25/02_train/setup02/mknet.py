@@ -2,7 +2,7 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name, scope):
+def create_network(input_shape, name, scope, make_config=False):
 
     tf.reset_default_graph()
 
@@ -55,8 +55,24 @@ def create_network(input_shape, name, scope):
             'output_shape': output_shape}
         with open(name + '_config.json', 'w') as f:
             json.dump(config, f)
+    
+        if make_config:
+            config = {
+                'raw': raw.name,
+                'embedding': embedding.name,
+                'gt_embedding': gt_embedding.name,
+                'embedding_loss_weights': embedding_loss_weights.name,
+                'loss': loss.name,
+                'optimizer': optimizer.name,
+                'input_shape': input_shape,
+                'output_shape': output_shape,
+                'out_dims': 10,
+                'out_dtype': 'float32'
+                }
+            with open('config.json', 'w') as f:
+                json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net', 'setup02')
-    create_network((196, 196, 196), 'test_net', 'setup02')
+    create_network((248, 248, 248), 'test_net', 'setup02', make_config=True)

@@ -11,17 +11,26 @@ if __name__ == '__main__':
     combinations = {
         'experiment': 'cremi',
         'setups': [
-            'setup01',
-            'setup04',
-            'setup05',
-            'setup08',
-            'setup09',
-            'setup12',
-            'setup22',
-            'setup23',
-            'setup34',
-            'setup35',
-            'setup40'
+            #'setup01',
+            #'setup03',
+            #'setup04',
+            'setup04_f',
+            #'setup05',
+            'setup05_f',
+            #'setup07',
+            #'setup08',
+            'setup08_f',
+            #'setup09',
+            #'setup12',
+            #'setup22',
+            #'setup23',
+            #'setup28',
+            #'setup34',
+            #'setup35',
+            #'setup40',
+            #'setup41',
+            #'setup46',
+            #'setup47'
         ],
         'iterations': [300000, 400000, 500000],
         'samples': ['testing/sample_C_padded_20160501.aligned.filled.cropped.62:153.n5'],
@@ -38,7 +47,7 @@ if __name__ == '__main__':
         ],
         'border_threshold': 25,
         'thresholds_minmax': [0, 1],
-        'thresholds_step': 0.1
+        'thresholds_step': 0.01
     }
 
     range_keys = [
@@ -50,7 +59,7 @@ if __name__ == '__main__':
 
     luigi.build(
             [EvaluateCombinations(combinations, range_keys)],
-            workers=10,
+            workers=20,
             scheduler_host='slowpoke1.int.janelia.org',
             logging_conf_file='/groups/funke/home/funkej/.luigi/logging.conf'
     )

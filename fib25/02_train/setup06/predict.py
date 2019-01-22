@@ -7,12 +7,12 @@ import os
 import sys
 import logging
 
-def predict(iteration, in_file, read_roi, out_file, write_roi):
+def predict(iteration, in_file, read_roi, out_file):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
     # TODO: change to predict graph
-    with open(os.path.join(setup_dir, 'train_net_config.json'), 'r') as f:
+    with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -21,15 +21,13 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
     voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
-    read_roi *= voxel_size
-    write_roi *= voxel_size
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        N5Source(
+        ZarrSource(
             in_file,
             datasets = {
                 raw: 'volumes/raw'
@@ -47,17 +45,17 @@ def predict(iteration, in_file, read_roi, out_file, write_roi):
             outputs={
                 config['affs']: affs
             },
-            # TODO: change to predict graph
-            graph=os.path.join(setup_dir, 'train_net.meta')
+            graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
-        N5Write(
+        IntensityScaleShift(affs, 255, 0) +
+        ZarrWrite(
             dataset_names={
                 affs: 'volumes/affs',
             },
             output_filename=out_file
         ) +
         PrintProfilingStats(every=10) +
-        Scan(chunk_request)
+        Scan(chunk_request, num_workers=10)
     )
 
     print("Starting prediction...")
@@ -76,14 +74,10 @@ if __name__ == "__main__":
 
     read_roi = Roi(
         config['read_begin'],
-        config['read_shape'])
-    write_roi = Roi(
-        config['write_begin'],
-        config['write_shape'])
-
+        config['read_size'])
+    
     predict(
         config['iteration'],
-        config['in_file'],
+        config['raw_file'],
         read_roi,
-        config['out_file'],
-        write_roi)
+        config['out_file'])

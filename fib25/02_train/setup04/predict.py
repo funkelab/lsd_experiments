@@ -7,11 +7,11 @@ import os
 import sys
 import logging
 
-def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
+def predict(iteration, in_file, read_roi, out_file, out_dataset):
 
     setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-    with open(os.path.join(setup_dir, 'test_net_config.json'), 'r') as f:
+    with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -26,7 +26,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        N5Source(
+        ZarrSource(
             in_file,
             datasets = {
                 raw: 'volumes/raw'
@@ -49,7 +49,8 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset, write_roi):
             },
             graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
-        N5Write(
+        IntensityScaleShift(affs, 255, 0) +
+        ZarrWrite(
             dataset_names={
                 affs: out_dataset,
             },
@@ -80,14 +81,9 @@ if __name__ == "__main__":
     read_roi = Roi(
         config['read_begin'],
         config['read_size'])
-    write_roi = Roi(
-        config['write_begin'],
-        config['write_size'])
-
     predict(
         config['iteration'],
-        config['in_file'],
+        config['raw_file'],
         read_roi,
         config['out_file'],
-        config['out_dataset'],
-        write_roi)
+        config['out_dataset'])

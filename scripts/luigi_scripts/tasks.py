@@ -41,7 +41,7 @@ class LsdTask(luigi.Task):
     experiment = luigi.Parameter()
     setup = luigi.Parameter()
     iteration = luigi.IntParameter()
-
+    predict_base = None
     def input_data_dir(self):
         return os.path.join(
             base_dir,
@@ -56,12 +56,20 @@ class LsdTask(luigi.Task):
             self.setup)
 
     def predict_dir(self):
-        return os.path.join(
-            base_dir,
-            self.experiment,
-            '03_predict',
-            self.setup,
-            str(self.iteration))
+        if LsdTask.predict_base is None:
+            return os.path.join(
+                base_dir,
+                self.experiment,
+                '03_predict',
+                self.setup,
+                str(self.iteration))
+        else:
+            return os.path.join(
+                LsdTask.predict_base,
+                '03_predict',
+                self.setup,
+                str(self.iteration))
+
 
 class TrainTask(LsdTask):
 
@@ -125,9 +133,40 @@ class PredictTask(PredictionTask):
     block_size_in_chunks = [2, 7, 7]
 
     def requires(self):
-        return TrainTask(self.experiment, self.setup, self.iteration)
+
+        with open(os.path.join(self.train_dir(), 'config.json')) as f:
+            config = json.load(f)
+
+        require = [TrainTask(self.experiment, self.setup, self.iteration)]
+
+        if 'lsd_setup' in config:
+            require.append(
+                PredictTask(
+                    self.experiment,
+                    config['lsd_setup'],
+                    config['lsd_iteration'],
+                    self.sample,
+                    'lsds'))
+
+        return require
 
     def run(self):
+
+        with open(os.path.join(self.train_dir(), 'config.json')) as f:
+            config = json.load(f)
+
+        if 'lsd_setup' in config:
+            predict_lsds_task = PredictTask(
+                    self.experiment,
+                    config['lsd_setup'],
+                    config['lsd_iteration'],
+                    self.sample,
+                    'lsds')
+            lsds_file = predict_lsds_task.prediction_filename()
+            lsds_dataset = 'volumes/lsds'
+        else:
+            lsds_file = None
+            lsds_dataset = None
 
         mkdirs(self.prediction_filename())
         output_base = self.prediction_filename() + '_predict'
@@ -140,8 +179,10 @@ class PredictTask(PredictionTask):
                 'experiment': self.experiment,
                 'setup': self.setup,
                 'iteration': self.iteration,
-                'in_file': self.input_filename(),
-                'in_dataset': 'volumes/raw',
+                'raw_file': self.input_filename(),
+                'raw_dataset': 'volumes/raw',
+                'lsds_file': lsds_file,
+                'lsds_dataset': lsds_dataset,
                 'out_file': self.prediction_filename(),
                 'out_dataset': 'volumes/' + self.predict_type,
                 'block_size_in_chunks': PredictTask.block_size_in_chunks,
@@ -171,6 +212,7 @@ class ExtractFragmentsTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_context = luigi.ListParameter(default=[])
 
     # maximum number of workers for this task
     workers_per_task = 4
@@ -196,6 +238,14 @@ class ExtractFragmentsTask(PredictionTask):
             self.iteration,
             self.sample)
 
+        mask_file = os.path.join(self.input_data_dir(), self.sample)
+        if len(self.mask_context) != 0:
+            mask_dataset = 'volumes/labels/mask_erode'
+            for context_in_dim in mask_context:
+                mask_dataset += '_{}'.format(context_in_dim)
+        else:
+            mask_dataset = 'volumes/labels/mask'
+
         config_filename = output_base + '.json'
         with open(config_filename, 'w') as f:
             json.dump({
@@ -211,8 +261,8 @@ class ExtractFragmentsTask(PredictionTask):
                 'fragments_in_xy': self.fragments_in_xy,
                 'epsilon_agglomerate': self.epsilon_agglomerate,
                 'mask_fragments': self.mask_fragments,
-                'mask_file': os.path.join(self.input_data_dir(), self.sample),
-                'mask_dataset': 'volumes/labels/mask'
+                'mask_file': mask_file,
+                'mask_dataset': mask_dataset
             }, f)
 
 
@@ -247,6 +297,7 @@ class AgglomerateTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
 
     # maximum number of workers for this task
@@ -263,7 +314,8 @@ class AgglomerateTask(PredictionTask):
             self.context,
             self.fragments_in_xy,
             self.epsilon_agglomerate,
-            self.mask_fragments)
+            self.mask_fragments,
+            self.mask_context)
 
     def run(self):
 
@@ -327,6 +379,7 @@ class SegmentTask(PredictionTask):
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
     threshold = luigi.FloatParameter()
 
@@ -342,6 +395,7 @@ class SegmentTask(PredictionTask):
             self.fragments_in_xy,
             self.epsilon_agglomerate,
             self.mask_fragments,
+            self.mask_context,
             self.merge_function)
 
     def run(self):
@@ -396,14 +450,15 @@ class SegmentTask(PredictionTask):
             self.prediction_filename(),
             self.segmentation_dataset())
 
-class EvaluateTask(LsdTask):
+class EvaluateTask(PredictionTask):
 
-    sample = luigi.Parameter()
+    gt_file = luigi.Parameter(default=None) 
     block_size = GenericParameter()
     context = GenericParameter()
     fragments_in_xy = luigi.BoolParameter()
     epsilon_agglomerate = luigi.FloatParameter()
     mask_fragments = luigi.BoolParameter()
+    mask_context = luigi.ListParameter(default=[])
     merge_function = luigi.Parameter()
     border_threshold = luigi.IntParameter()
     thresholds_minmax = GenericParameter()
@@ -421,6 +476,7 @@ class EvaluateTask(LsdTask):
             self.fragments_in_xy,
             self.epsilon_agglomerate,
             self.mask_fragments,
+            self.mask_context,
             self.merge_function)
 
     def run(self):
@@ -440,7 +496,7 @@ class EvaluateTask(LsdTask):
             json.dump({
                 'gt_file': self.gt_filename(),
                 'gt_dataset': 'volumes/labels/neuron_ids',
-                'fragments_file': self.input_filename(),
+                'fragments_file': self.prediction_filename(),
                 'fragments_dataset': 'volumes/fragments',
                 'border_threshold': self.border_threshold,
                 'db_host': db_host,
@@ -464,7 +520,10 @@ class EvaluateTask(LsdTask):
             log_err)
 
     def gt_filename(self):
-        return os.path.join(self.input_data_dir(), self.sample)
+        if self.gt_file is None:
+            return os.path.join(self.input_data_dir(), self.sample)
+        else:
+            return os.path.realpath(self.gt_file)
 
     def input_filename(self):
         return os.path.join(self.predict_dir(), self.sample)

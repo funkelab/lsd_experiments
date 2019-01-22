@@ -26,7 +26,7 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        N5Source(
+        ZarrSource(
             in_file,
             datasets = {
                 raw: 'volumes/raw'
@@ -49,7 +49,8 @@ def predict(iteration, in_file, read_roi, out_file, out_dataset):
             },
             graph=os.path.join(setup_dir, 'test_net.meta')
         ) +
-        N5Write(
+        IntensityScaleShift(affs, 255, 0) +
+        ZarrWrite(
             dataset_names={
                 affs: out_dataset,
             },

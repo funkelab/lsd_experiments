@@ -29,7 +29,7 @@ def contingencies_in_block(
     gt_seg_in_block = gt_seg[block.read_roi].to_ndarray()
     seg_indices = np.ravel(seg_in_block)
     gt_seg_indices = np.ravel(gt_seg_in_block)
-    ignored = np.logical_or(np.isin(seg_indices, ignore), np.isin(gt_seg_indices, ignore))
+    ignored = np.isin(gt_seg_indices, ignore)
     data = np.ones(seg_indices.shape)
     data[ignored] = 0
     partial_contingencies = sparse.coo_matrix(
@@ -56,9 +56,10 @@ def create_chunk_slices(total_size, chunk_size):
     return [slice(i, min(i+chunk_size, total_size)) for i in range(0, total_size, chunk_size)]
 
 def parallel_score(
-        tmp_fname,
-        tmp_seg_name,
-        tmp_gt_seg_name,
+        seg_file,
+        seg_dataset,
+        gt_seg_file,
+        gt_seg_dataset,
         total_roi,
         block_size,
         chunk_size,
@@ -70,8 +71,8 @@ def parallel_score(
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
 
-    seg = daisy.open_ds(tmp_fname, tmp_seg_name)
-    gt_seg = daisy.open_ds(tmp_fname, tmp_gt_seg_name)
+    seg = daisy.open_ds(seg_file, seg_dataset)
+    gt_seg = daisy.open_ds(gt_seg_file, gt_seg_dataset)
     m = mp.Manager()
     blocked_contingencies = m.list()
     blocked_seg_counts = m.list()
@@ -156,7 +157,7 @@ def main():
     seg = daisy.open_ds(seg_fname, seg_ds)
     gt_seg = daisy.open_ds(gt_fname, gt_dsname)
     total_roi = gt_seg.roi
-    block_size = (1024, 1024, 1024)
+    block_size = (4096, 4096, 4096)
     read_roi = daisy.Roi((0,)*3, block_size)
     write_roi = daisy.Roi((0,)*3, block_size)
     chunk_size = 16384

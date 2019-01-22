@@ -9,6 +9,9 @@ import math
 import json
 import tensorflow as tf
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/training'
 samples = [
@@ -26,7 +29,7 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net_config.json', 'r') as f:
+    with open('train_lsd_net.json', 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
@@ -137,7 +140,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Train(
-            'train_net',
+            'train_lsd_net',
             optimizer=config['optimizer'],
             loss=config['loss'],
             inputs={
@@ -175,6 +178,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-    set_verbose(False)
     iteration = int(sys.argv[1])
     train_until(iteration)
