@@ -8,6 +8,7 @@ import glob
 import numpy as np
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
+from funlib.segment.graphs.impl import connected_components
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('daisy.persistence.shared_graph_provider').setLevel(logging.DEBUG)
@@ -104,18 +105,20 @@ def find_segments(
                 'center_y',
                 'center_x'])
 
+        roi = daisy.Roi(
+            kwargs['roi_offset'],
+            kwargs['roi_shape'])
+
         node_attrs, edge_attrs = graph_provider.read_blockwise(
-            daisy.Roi(
-                kwargs['roi_offset'],
-                kwargs['roi_shape']),
-            block_size=daisy.Coordinate((4096, 4096, 4096)),
+            roi,
+            block_size=daisy.Coordinate((10000, 10000, 10000)),
             num_workers=kwargs['num_workers'])
 
         print("Read graph in %.3fs"%(time.time() - start))
 
         nodes = node_attrs['id']
         edges = np.stack([edge_attrs['u'], edge_attrs['v']], axis=1)
-        scores = edge_attrs['merge_score']
+        scores = edge_attrs['merge_score'].astype(np.float32)
 
     print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
 
@@ -123,7 +126,7 @@ def find_segments(
 
         print("Getting CCs for threshold %.3f..."%threshold)
         start = time.time()
-        components = lsd.connected_components(nodes, edges, scores, threshold)
+        components = connected_components(nodes, edges, scores, threshold)
         print("%.3fs"%(time.time() - start))
 
         print("Creating fragment-segment LUT...")
@@ -137,16 +140,14 @@ def find_segments(
         ])
         print("%.3fs"%(time.time() - start))
 
-        # DEBUG: commented out for dry run:
-
-        # print("Storing fragment-segment LUT...")
-        # start = time.time()
-        # store_fragseg_lut(
-            # db_host,
-            # db_name,
-            # 'seg_%s_%d'%(edges_collection,int(threshold*100)),
-            # lut)
-        # print("%.3fs"%(time.time() - start))
+        print("Storing fragment-segment LUT...")
+        start = time.time()
+        store_fragseg_lut(
+            db_host,
+            db_name,
+            'seg_%s_%d'%(edges_collection,int(threshold*100)),
+            lut)
+        print("%.3fs"%(time.time() - start))
 
 if __name__ == "__main__":
 
