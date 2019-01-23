@@ -83,7 +83,8 @@ def find_segments(
         db_host,
         db_name,
         edges_collection,
-        thresholds,
+        thresholds_minmax,
+        thresholds_step,
         **kwargs):
 
     if 'dump_dir' in kwargs:
@@ -116,11 +117,20 @@ def find_segments(
 
         print("Read graph in %.3fs"%(time.time() - start))
 
+        if 'id' not in node_attrs:
+            print('No nodes found in roi %s' % roi)
+            return
+
         nodes = node_attrs['id']
         edges = np.stack([edge_attrs['u'], edge_attrs['v']], axis=1)
         scores = edge_attrs['merge_score'].astype(np.float32)
 
     print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
+
+    thresholds = list(np.arange(
+        thresholds_minmax[0],
+        thresholds_minmax[1],
+        thresholds_step))
 
     for threshold in thresholds:
 
