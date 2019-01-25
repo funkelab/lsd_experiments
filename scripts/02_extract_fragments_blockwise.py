@@ -13,6 +13,9 @@ logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def extract_fragments(
+        experiment,
+        setup,
+        iteration,
         affs_file,
         affs_dataset,
         fragments_file,
@@ -57,6 +60,8 @@ def extract_fragments(
     logging.info("Reading affs from %s", affs_file)
     affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
 
+    network_dir = os.path.join(experiment, setup, str(iteration))
+
     # prepare fragments dataset
     fragments = daisy.prepare_ds(
         fragments_file,
@@ -92,7 +97,7 @@ def extract_fragments(
         total_roi,
         read_roi,
         write_roi,
-        process_function=lambda: start_worker(sys.argv[1], queue),
+        process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
         check_function=lambda b: check_block(
             blocks_extracted,
             b),
@@ -100,21 +105,23 @@ def extract_fragments(
         read_write_conflict=False,
         fit='shrink')
 
-def start_worker(config_file, queue):
+def start_worker(config_file, network_dir, queue):
 
     worker_id = daisy.Context.from_env().worker_id
 
+    output_dir = os.path.join('.extract_fragments_blockwise', network_dir)
+
     try:
-        os.makedirs('.extract_fragments_blockwise')
+        os.makedirs(output_dir)
     except:
         pass
 
-    log_out = os.path.join('.extract_fragments_blockwise', 'extract_fragments_%d.out' %worker_id)
-    log_err = os.path.join('.extract_fragments_blockwise', 'extract_fragments_%d.err' %worker_id)
+    log_out = os.path.join(output_dir, 'extract_fragments_blockwise_%d.out' %worker_id)
+    log_err = os.path.join(output_dir, 'extract_fragments_blockwise_%d.err' %worker_id)
 
     daisy.call([
         'run_lsf',
-        '-c', '5',
+        '-c', '1',
         '-g', '0',
         # '-h', "'c04u07 c04u12 c04u17 c04u21 c04u26 c04u31'",
         '-q', queue,
@@ -143,7 +150,7 @@ def extract_fragments_worker(
         db_name,
         fragments_in_xy,
         queue,
-        epsilon_extract_fragments=0,
+        epsilon_agglomerate=0,
         mask_file=None,
         mask_dataset=None,
         **kwargs):
@@ -211,8 +218,8 @@ def extract_fragments_worker(
             rag_provider,
             fragments,
             fragments_in_xy,
-            epsilon_extract_fragments,
-            mask)
+            epsilon_agglomerate=epsilon_agglomerate,
+            mask=mask)
 
         document = {
             'num_cpus': 5,
