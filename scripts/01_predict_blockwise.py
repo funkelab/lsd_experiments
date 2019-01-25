@@ -19,11 +19,11 @@ def predict_blockwise(
         raw_file,
         raw_dataset,
         out_file,
+        file_name,
         out_dataset,
         num_workers,
         db_host,
         db_name,
-        collection='blocks_predicted',
         lsds_file=None,
         lsds_dataset=None):
 
@@ -68,10 +68,10 @@ def predict_blockwise(
     experiment_dir = '../' + experiment
     data_dir = os.path.join(experiment_dir, '01_data')
     train_dir = os.path.join(experiment_dir, '02_train')
-    network_dir = os.path.join(setup, str(iteration))
+    network_dir = os.path.join(experiment, setup, str(iteration))
 
     raw_file = os.path.abspath(raw_file)
-    out_file = os.path.abspath(os.path.join(out_file, setup, str(iteration), 'calyx.zarr'))
+    out_file = os.path.abspath(os.path.join(out_file, setup, str(iteration), file_name))
 
     setup = os.path.abspath(os.path.join(train_dir, setup))
 
@@ -83,8 +83,8 @@ def predict_blockwise(
     try:
         source = daisy.open_ds(raw_file, raw_dataset)
     except:
-        in_dataset = raw_dataset + '/s0'
-        source = daisy.open_ds(raw_file, in_dataset)
+        raw_dataset = raw_dataset + '/s0'
+        source = daisy.open_ds(raw_file, raw_dataset)
     print("Source dataset has shape %s, ROI %s, voxel size %s"%(
         source.shape, source.roi, source.voxel_size))
 
@@ -143,13 +143,13 @@ def predict_blockwise(
 
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
-    if collection not in db.list_collection_names():
-        blocks_predicted = db[collection]
+    if 'blocks_predicted' not in db.list_collection_names():
+        blocks_predicted = db['blocks_predicted']
         blocks_predicted.create_index(
             [('block_id', pymongo.ASCENDING)],
             name='block_id')
     else:
-        blocks_predicted = db[collection]
+        blocks_predicted = db['blocks_predicted']
 
     # process block-wise
     succeeded = daisy.run_blockwise(
@@ -159,6 +159,7 @@ def predict_blockwise(
         process_function=lambda: predict_worker(
             experiment,
             setup,
+            network_dir,
             iteration,
             raw_file,
             raw_dataset,
@@ -167,8 +168,7 @@ def predict_blockwise(
             out_file,
             out_dataset,
             db_host,
-            db_name,
-            collection),
+            db_name),
         check_function=lambda b: check_block(
             blocks_predicted,
             b),
@@ -182,6 +182,7 @@ def predict_blockwise(
 def predict_worker(
         experiment,
         setup,
+        network_dir,
         iteration,
         raw_file,
         raw_dataset,
@@ -190,8 +191,7 @@ def predict_worker(
         out_file,
         out_dataset,
         db_host,
-        db_name,
-        collection):
+        db_name):
 
     setup_dir = os.path.join('..', experiment, '02_train', setup)
     predict_script = os.path.abspath(os.path.join(setup_dir, 'predict_newdaisy.py'))
@@ -202,10 +202,10 @@ def predict_worker(
             raw_file = spec['container']
 
     worker_config = {
-        'queue': 'gpu_tesla',
+        'queue': 'slowpoke',
         'num_cpus': 5,
         'num_cache_workers': 10,
-        'singularity': None # TODO: use 'funkey/lsd:v0.7'
+        'singularity': 'funkey/lsd:v0.8'
     }
 
     config = {
@@ -218,7 +218,6 @@ def predict_worker(
         'out_dataset': out_dataset,
         'db_host': db_host,
         'db_name': db_name,
-        'collection': collection,
         'worker_config': worker_config
     }
 
@@ -226,13 +225,20 @@ def predict_worker(
     config_str = ''.join(['%s'%(v,) for v in config.values()])
     config_hash = abs(int(hashlib.md5(config_str.encode()).hexdigest(), 16))
 
+    worker_id = daisy.Context.from_env().worker_id
+
+    output_dir = os.path.join('.predict_blockwise', network_dir)
+
     try:
-        os.makedirs('.predict_configs')
+        os.makedirs(output_dir)
     except:
         pass
-    config_file = os.path.join('.predict_configs', '%d.config'%config_hash)
-    log_out = os.path.join('.predict_configs', '%d.out'%config_hash)
-    log_err = os.path.join('.predict_configs', '%d.err'%config_hash)
+
+    config_file = os.path.join(output_dir, '%d.config'%config_hash)
+
+    log_out = os.path.join(output_dir, 'predict_blockwise_%d.out'%worker_id)
+    log_err = os.path.join(output_dir, 'predict_blockwise_%d.err'%worker_id)
+
     with open(config_file, 'w') as f:
         json.dump(config, f)
 
@@ -242,6 +248,7 @@ def predict_worker(
         'run_lsf',
         '-c', str(worker_config['num_cpus']),
         '-g', '1',
+        # '-h', "'c04u12 c04u17 c04u26'",
         '-q', worker_config['queue']
     ]
 
@@ -282,11 +289,11 @@ if __name__ == "__main__":
         config = json.load(f)
 
     start = time.time()
-    
+
     predict_blockwise(**config)
 
     end = time.time()
-    
+
     seconds = end - start
     print('Total time to predict: %f seconds' % seconds)
 
