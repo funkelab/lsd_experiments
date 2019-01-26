@@ -13,6 +13,9 @@ logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
+        experiment,
+        setup,
+        iteration,
         affs_file,
         affs_dataset,
         fragments_file,
@@ -23,6 +26,7 @@ def agglomerate(
         db_name,
         num_workers,
         queue,
+        merge_function,
         **kwargs):
 
     '''Run agglomeration in parallel blocks. Requires that affinities have been
@@ -67,6 +71,8 @@ def agglomerate(
     logging.info("Reading affs from %s", affs_file)
     affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
 
+    network_dir = os.path.join(experiment, setup, str(iteration), merge_function)
+
     logging.info("Reading fragments from %s", fragments_file)
     fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r')
 
@@ -90,7 +96,7 @@ def agglomerate(
             total_roi,
             read_roi,
             write_roi,
-            process_function=lambda: start_worker(sys.argv[1], queue),
+            process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
             check_function=lambda b: check_block(
                 blocks_agglomerated,
                 b),
@@ -98,21 +104,23 @@ def agglomerate(
             read_write_conflict=False,
             fit='shrink')
 
-def start_worker(config_file, queue):
+def start_worker(config_file, network_dir, queue):
 
     worker_id = daisy.Context.from_env().worker_id
 
+    output_dir = os.path.join('.agglomerate_blockwise', network_dir)
+
     try:
-        os.makedirs('.agglomerate_blockwise')
+        os.makedirs(output_dir)
     except:
         pass
 
-    log_out = os.path.join('.agglomerate_blockwise', 'agglomerate_%d.out' %worker_id)
-    log_err = os.path.join('.agglomerate_blockwise', 'agglomerate_%d.err' %worker_id)
+    log_out = os.path.join(output_dir, 'agglomerate_blockwise_%d.out' %worker_id)
+    log_err = os.path.join(output_dir, 'agglomerate_blockwise_%d.err' %worker_id)
 
     daisy.call([
         'run_lsf',
-        '-c', '5',
+        '-c', '1',
         '-g', '0',
         '-q', queue,
         '-s', 'funkey/lsd:v0.8',
