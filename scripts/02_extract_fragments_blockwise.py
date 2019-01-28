@@ -125,6 +125,7 @@ def start_worker(config_file, network_dir, queue):
         '-g', '0',
         # '-h', "'c04u07 c04u12 c04u17 c04u21 c04u26 c04u31'",
         '-q', queue,
+        '-b',
         '-s', 'funkey/lsd:v0.8',
         'python', './02_extract_fragments_blockwise.py', sys.argv[1],
         '--run-worker'],

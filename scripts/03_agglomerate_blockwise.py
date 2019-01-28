@@ -79,13 +79,17 @@ def agglomerate(
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
 
-    if 'blocks_agglomerated' not in db.list_collection_names():
-        blocks_agglomerated = db['blocks_agglomerated']
+    blocks_agglomerated = ''.join([
+        'blocks_agglomerated_',
+        merge_function])
+
+    if ''.join(['blocks_agglomerated_', merge_function]) not in db.list_collection_names():
+        blocks_agglomerated = db[blocks_agglomerated]
         blocks_agglomerated.create_index(
                 [('block_id', pymongo.ASCENDING)],
                 name='block_id')
     else:
-        blocks_agglomerated = db['blocks_agglomerated']
+        blocks_agglomerated = db[blocks_agglomerated]
 
     context = daisy.Coordinate(context)
     total_roi = affs.roi.grow(context, context)
@@ -123,6 +127,7 @@ def start_worker(config_file, network_dir, queue):
         '-c', '1',
         '-g', '0',
         '-q', queue,
+        '-b',
         '-s', 'funkey/lsd:v0.8',
         'python', './03_agglomerate_blockwise.py', sys.argv[1],
         '--run_worker'],
@@ -185,7 +190,11 @@ def agglomerate_worker(
     # open block done DB
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
-    blocks_agglomerated = db['blocks_agglomerated']
+    blocks_agglomerated = ''.join([
+        'blocks_agglomerated_',
+        merge_function])
+
+    blocks_agglomerated = db[blocks_agglomerated]
 
     client = daisy.Client()
 
