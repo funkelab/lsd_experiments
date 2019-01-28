@@ -2,75 +2,80 @@ import mala
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name, make_config=False):
+def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    raw = tf.placeholder(tf.float32, shape=input_shape)
-    raw_batched = tf.reshape(raw, (1, 1) + input_shape)
+    with tf.variable_scope('setup01'):
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+        raw = tf.placeholder(tf.float32, shape=input_shape)
+        raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    affs_batched, _ = mala.networks.conv_pass(
-        unet,
-        kernel_sizes=[1],
-        num_fmaps=3,
-        activation='sigmoid',
-        name='affs')
+        unet, _, _ = mala.networks.unet(
+            raw_batched,
+            12,
+            6,
+            [[2,2,2],[2,2,2],[3,3,3]])
 
-    output_shape_batched = affs_batched.get_shape().as_list()
-    output_shape = output_shape_batched[1:] # strip the batch dimension
+        affs_batched, _ = mala.networks.conv_pass(
+            unet,
+            kernel_sizes=[1],
+            num_fmaps=3,
+            activation='sigmoid',
+            name='affs')
+        affs = tf.squeeze(affs_batched, axis=0)
 
-    affs = tf.reshape(affs_batched, output_shape)
+        output_shape = tuple(affs.get_shape().as_list()[1:])
 
-    gt_affs = tf.placeholder(tf.float32, shape=output_shape)
-    affs_loss_weights = tf.placeholder(tf.float32, shape=output_shape)
-    loss = tf.losses.mean_squared_error(
-        gt_affs,
-        affs,
-        affs_loss_weights)
+        gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
+        loss_weights_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
 
-    opt = tf.train.AdamOptimizer(
-        learning_rate=0.5e-4,
-        beta1=0.95,
-        beta2=0.999,
-        epsilon=1e-8)
-    optimizer = opt.minimize(loss)
+        loss_affs = tf.losses.mean_squared_error(
+            gt_affs,
+            affs,
+            loss_weights_affs)
 
-    output_shape = output_shape[1:]
-    print("input shape : %s"%(input_shape,))
-    print("output shape: %s"%(output_shape,))
+        loss = loss_affs
 
-    tf.train.export_meta_graph(filename=name + '.meta')
+        summary = tf.summary.scalar('loss', loss)
 
-    config = {
-        'raw': raw.name,
-        'affs': affs.name,
-        'gt_affs': gt_affs.name,
-        'affs_loss_weights': affs_loss_weights.name,
-        'loss': loss.name,
-        'optimizer': optimizer.name,
-        'input_shape': input_shape,
-        'output_shape': output_shape}
-    with open(name + '_config.json', 'w') as f:
-        json.dump(config, f)
-    
-    if make_config:
+        opt = tf.train.AdamOptimizer(
+            learning_rate=0.5e-4,
+            beta1=0.95,
+            beta2=0.999,
+            epsilon=1e-8)
+        optimizer = opt.minimize(loss)
+
+        print("input shape : %s"%(input_shape,))
+        print("output shape: %s"%(output_shape,))
+
+        tf.train.export_meta_graph(filename=name + '.meta')
+
         config = {
             'raw': raw.name,
             'affs': affs.name,
             'gt_affs': gt_affs.name,
-            'affs_loss_weights': affs_loss_weights.name,
+            'loss_weights_affs': loss_weights_affs.name,
             'loss': loss.name,
             'optimizer': optimizer.name,
             'input_shape': input_shape,
             'output_shape': output_shape,
-            'out_dims': 3,
-            'out_dtype': "uint8"}
-        with open('config.json', 'w') as f:
+            'summary': summary.name
+        }
+        with open(name + '_config.json', 'w') as f:
             json.dump(config, f)
+
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((352, 352, 352), 'test_net', make_config=True)
+    create_network((352, 352, 352), 'test_net')
+
+    with open('test_net_config.json', 'r') as f:
+        config = json.load(f)
+    config.update({
+        'out_dims': 3,
+        'out_dtype': 'uint8'
+    })
+    with open('config.json', 'w') as f:
+        json.dump(config, f)

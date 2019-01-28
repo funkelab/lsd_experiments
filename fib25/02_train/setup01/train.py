@@ -1,14 +1,14 @@
 from __future__ import print_function
-import sys
 from gunpowder import *
 from gunpowder.tensorflow import *
-import malis
-import os
-import math
-import logging
 import json
-import tensorflow as tf
+import logging
+import malis
+import math
 import numpy as np
+import os
+import sys
+import tensorflow as tf
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,11 +36,11 @@ def train_until(max_iteration):
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     affs = ArrayKey('PREDICTED_AFFS')
-    gt = ArrayKey('GT_AFFINITIES')
-    gt_mask = ArrayKey('GT_AFFINITIES_MASK')
-    gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    gt_affs = ArrayKey('GT_AFFS')
+    gt_affs_scale = ArrayKey('GT_AFFS_SCALE')
+    affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    voxel_size = Coordinate((8,8,8))
+    voxel_size = Coordinate((8, 8, 8))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
 
@@ -48,12 +48,12 @@ def train_until(max_iteration):
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(gt, output_size)
-    request.add(gt_mask, output_size)
-    request.add(gt_scale, output_size)
+    request.add(gt_affs, output_size)
+    request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
-        affs: request[gt],
+        affs: request[gt_affs],
+        affs_gradient: request[gt_affs]
     })
 
     data_sources = tuple(
@@ -64,11 +64,17 @@ def train_until(max_iteration):
                 labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
+            array_specs = {
+                raw: ArraySpec(interpolatable=True),
+                labels: ArraySpec(interpolatable=False),
+                labels_mask: ArraySpec(interpolatable=False)
+            }
         ) +
         Normalize(raw) +
         Pad(raw, None) +
-        RandomLocation() +
-        Reject(mask=labels_mask)
+        Pad(labels, None) +
+        Pad(labels_mask, Coordinate((160, 160, 160))) +
+        RandomLocation(min_masked=0.5, mask=labels_mask)
         for sample in samples
     )
 
@@ -77,55 +83,68 @@ def train_until(max_iteration):
         data_sources +
         RandomProvider() +
         ElasticAugment(
-            [40,40,40],
-            [2,2,2],
-            [0,math.pi/2.0],
+            control_point_spacing=[40, 40, 40],
+            jitter_sigma=[0, 0, 0],
+            rotation_interval=[0,math.pi/2.0],
+            prob_slip=0,
+            prob_shift=0,
+            max_misalign=0,
+            subsample=8) +
+        SimpleAugment() +
+        ElasticAugment(
+            control_point_spacing=[40,40,40],
+            jitter_sigma=[2,2,2],
+            rotation_interval=[0,math.pi/2.0],
             prob_slip=0.01,
             prob_shift=0.01,
             max_misalign=1,
             subsample=8) +
-        SimpleAugment() +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
         AddAffinities(
             [[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
             labels=labels,
-            affinities=gt,
-            labels_mask=labels_mask,
-            affinities_mask=gt_mask) +
+            affinities=gt_affs,
+            labels_mask=labels_mask) +
         BalanceLabels(
-            gt,
-            gt_scale,
-            gt_mask) +
+            gt_affs,
+            gt_affs_scale) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
-            num_workers=16) +
+            num_workers=10) +
         Train(
             'train_net',
             optimizer=config['optimizer'],
             loss=config['loss'],
             inputs={
                 config['raw']: raw,
-                config['gt_affs']: gt,
-                config['affs_loss_weights']: gt_scale,
+                config['gt_affs']: gt_affs,
+                config['loss_weights_affs']: gt_affs_scale,
             },
             outputs={
                 config['affs']: affs
             },
-            gradients={},
+            gradients={
+                config['affs']: affs_gradient
+            },
+            summary=config['summary'],
+            log_dir='log',
             save_every=100000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/labels/gt_affinities',
-                affs: 'volumes/labels/pred_affinities',
+                gt_affs: 'volumes/gt_affinities',
+                affs: 'volumes/pred_affinities',
+                labels_mask: 'volumes/labels/mask',
+                affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
-                labels: np.uint64
+                labels: np.uint64,
+                gt_affs: np.float32
             },
-            every=100000,
+            every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
@@ -138,5 +157,6 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
+
     iteration = int(sys.argv[1])
     train_until(iteration)
