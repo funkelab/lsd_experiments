@@ -1,7 +1,6 @@
 import daisy
 import json
 import logging
-import lsd
 import sys
 import time
 import glob
@@ -12,6 +11,7 @@ from funlib.segment.graphs.impl import connected_components
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('daisy.persistence.shared_graph_provider').setLevel(logging.DEBUG)
+logging.getLogger('tornado').setLevel(logging.DEBUG)
 
 def read_graph_from_dump(dump_dir):
 
@@ -114,6 +114,12 @@ def find_segments(
             roi,
             block_size=daisy.Coordinate((10000, 10000, 10000)),
             num_workers=kwargs['num_workers'])
+
+        print("min node id", node_attrs['id'].min())
+        print("max node id", node_attrs['id'].max())
+        print("node id dtype", node_attrs['id'].dtype)
+        print("edge u dtype", edge_attrs['u'].dtype)
+        print("edge v dtype", edge_attrs['v'].dtype)
 
         print("Read graph in %.3fs"%(time.time() - start))
 
