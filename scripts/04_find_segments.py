@@ -1,9 +1,11 @@
 import daisy
 import json
 import logging
+import lsd
 import sys
 import time
 import glob
+import os
 import numpy as np
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
@@ -11,7 +13,6 @@ from funlib.segment.graphs.impl import connected_components
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('daisy.persistence.shared_graph_provider').setLevel(logging.DEBUG)
-logging.getLogger('tornado').setLevel(logging.DEBUG)
 
 def read_graph_from_dump(dump_dir):
 
@@ -47,41 +48,10 @@ def read_graph_from_dump(dump_dir):
 
     return (nodes, edges, scores)
 
-def store_fragseg_lut(
-        db_host,
-        db_name,
-        collection_name,
-        lut):
-
-    client = MongoClient(db_host)
-    database = client[db_name]
-    collection = database[collection_name]
-
-    # no need to append, create new one whenever we are here
-    collection.drop()
-
-    collection.create_index(
-        [
-            ('fragment', ASCENDING)
-        ],
-        name='fragment',
-        unique=True)
-
-    collection.create_index(
-        [
-            ('segment', ASCENDING)
-        ],
-        name='segment')
-
-    try:
-        collection.insert_many(lut)
-    except BulkWriteError as e:
-        print(e.details)
-        raise e
-
 def find_segments(
         db_host,
         db_name,
+        fragments_file,
         edges_collection,
         thresholds_minmax,
         thresholds_step,
@@ -115,23 +85,32 @@ def find_segments(
             block_size=daisy.Coordinate((10000, 10000, 10000)),
             num_workers=kwargs['num_workers'])
 
-        print("min node id", node_attrs['id'].min())
-        print("max node id", node_attrs['id'].max())
-        print("node id dtype", node_attrs['id'].dtype)
-        print("edge u dtype", edge_attrs['u'].dtype)
-        print("edge v dtype", edge_attrs['v'].dtype)
-
         print("Read graph in %.3fs"%(time.time() - start))
 
         if 'id' not in node_attrs:
             print('No nodes found in roi %s' % roi)
             return
 
+        print('id dtype: ', node_attrs['id'].dtype)
+        print('edge u  dtype: ', edge_attrs['u'].dtype)
+        print('edge v  dtype: ', edge_attrs['v'].dtype)
+
         nodes = node_attrs['id']
-        edges = np.stack([edge_attrs['u'], edge_attrs['v']], axis=1)
+        edges = np.stack([edge_attrs['u'].astype(np.uint64), edge_attrs['v'].astype(np.uint64)], axis=1)
         scores = edge_attrs['merge_score'].astype(np.float32)
 
+        print('Nodes dtype: ', nodes.dtype)
+        print('edges dtype: ', edges.dtype)
+        print('scores dtype: ', scores.dtype)
+
     print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
+
+    out_dir = os.path.join(fragments_file, 'frag_set_lut')
+
+    try:
+        out_dir = os.mkdir(out_dir)
+    except:
+        pass
 
     thresholds = list(np.arange(
         thresholds_minmax[0],
@@ -154,15 +133,20 @@ def find_segments(
             }
             for f, s in zip(nodes, components)
         ])
+
+        lut = np.array(lut)
+
         print("%.3fs"%(time.time() - start))
 
         print("Storing fragment-segment LUT...")
         start = time.time()
-        store_fragseg_lut(
-            db_host,
-            db_name,
-            'seg_%s_%d'%(edges_collection,int(threshold*100)),
-            lut)
+
+        lookup = 'seg_%s_%d'%(edges_collection, int(threshold*100))
+
+        out_file = os.path.join(out_dir, lookup)
+
+        np.save(out_file, lut)
+
         print("%.3fs"%(time.time() - start))
 
 if __name__ == "__main__":
@@ -172,4 +156,6 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         config = json.load(f)
 
+    start = time.time()
     find_segments(**config)
+    print('Took %.3f seconds to find segments and store LUTs'%(time.time() - start))
