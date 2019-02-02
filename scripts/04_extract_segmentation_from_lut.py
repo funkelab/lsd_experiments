@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import daisy
 import json
 import logging
-import lsd
+from funlib.segment.arrays import replace_values
 import sys
 import time
 import numpy as np
@@ -65,7 +65,7 @@ def segment_in_block(
 
     logging.info("Mapping fragments to %d segments", len(segment_ids))
     start = time.time()
-    relabelled = lsd.labels.replace_values(fragments, fragment_ids, segment_ids)
+    relabelled = replace_values(fragments, fragment_ids, segment_ids)
     logging.info("%.3fs"%(time.time() - start))
 
     segmentation[block.write_roi] = relabelled
@@ -78,9 +78,9 @@ def extract_segmentation(
         db_host,
         db_name,
         fragment_segment_collection,
+        num_workers,
         roi_offset=None,
         roi_shape=None,
-        num_workers=1,
         **kwargs):
 
     # open fragments
