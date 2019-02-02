@@ -24,8 +24,8 @@ def predict_blockwise(
         num_workers,
         db_host,
         db_name,
-        lsds_file=None,
-        lsds_dataset=None):
+        auto_file=None,
+        auto_dataset=None):
 
     '''Run prediction in parallel blocks. Within blocks, predict in chunks.
 
@@ -45,10 +45,10 @@ def predict_blockwise(
 
         raw_file (``string``):
         raw_dataset (``string``):
-        lsds_file (``string``):
-        lsds_dataset (``string``):
+        auto_file (``string``):
+        auto_dataset (``string``):
 
-            Paths to the input datasets. lsds can be None if not needed.
+            Paths to the input autocontext datasets (affs or lsds). Can be None if not needed.
 
         out_file (``string``):
         out_dataset (``string``):
@@ -163,8 +163,8 @@ def predict_blockwise(
             iteration,
             raw_file,
             raw_dataset,
-            lsds_file,
-            lsds_dataset,
+            auto_file,
+            auto_dataset,
             out_file,
             out_dataset,
             db_host,
@@ -186,8 +186,8 @@ def predict_worker(
         iteration,
         raw_file,
         raw_dataset,
-        lsds_file,
-        lsds_dataset,
+        auto_file,
+        auto_dataset,
         out_file,
         out_dataset,
         db_host,
@@ -202,8 +202,8 @@ def predict_worker(
             raw_file = spec['container']
 
     worker_config = {
-        'queue': 'slowpoke',
-        'num_cpus': 5,
+        'queue': 'gpu_any',
+        'num_cpus': 2,
         'num_cache_workers': 10,
         'singularity': 'funkey/lsd:v0.8'
     }
@@ -212,8 +212,8 @@ def predict_worker(
         'iteration': iteration,
         'raw_file': raw_file,
         'raw_dataset': raw_dataset,
-        'lsds_file': lsds_file,
-        'lsds_dataset': lsds_dataset,
+        'auto_file': auto_file,
+        'auto_dataset': auto_dataset,
         'out_file': out_file,
         'out_dataset': out_dataset,
         'db_host': db_host,
@@ -248,7 +248,6 @@ def predict_worker(
         'run_lsf',
         '-c', str(worker_config['num_cpus']),
         '-g', '1',
-        # '-h', "'c04u12 c04u17 c04u26'",
         '-q', worker_config['queue']
     ]
 
