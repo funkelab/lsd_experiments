@@ -65,7 +65,7 @@ if __name__ == "__main__":
     z=0
     xy=0
 
-    create_network((84, 268, 268), 'train_net')
+    # create_network((84, 268, 268), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
 
     with open('config.json', 'r') as f:

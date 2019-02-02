@@ -143,11 +143,11 @@ if __name__ == "__main__":
     train_output_shape = (48, 56, 56)
     create_lsd_network(train_input_shape, train_intermediate_shape, 'train_lsd_net', 'setup90_p')
     create_affs_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_net')
-    
-    o = 135
-    test_input_shape = (84, 268+o, 268+o)
-    test_intermediate_shape = (84, 268+o, 268+o)
-    test_output_shape = (48, 56+o, 56+o)
+
+    o = 0
+    test_input_shape = (96, 484+o, 484+o)
+    test_intermediate_shape = (96, 484+o, 484+o)
+    test_output_shape = (60, 272+o, 272+o)
     create_affs_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_net')
 
     create_config(test_input_shape, test_output_shape, 3, 'config')

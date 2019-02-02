@@ -129,10 +129,11 @@ if __name__ == "__main__":
     z=0
     xy=0
 
-    test_input_shape = (120, 484, 484)
-    test_intermediate_shape = (84, 268, 268)
-    test_output_shape = (48, 56, 56)
+    test_input_shape = (96, 484, 484)
+    test_intermediate_shape = (96, 484, 484)
+    test_output_shape = (60, 272, 272)
 
+    create_affs_network(test_input_shape, test_intermediate_shape, 'test_affs_net')
     create_affs2_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_net')
 
     create_config(test_input_shape, test_output_shape, 12, 'config')
