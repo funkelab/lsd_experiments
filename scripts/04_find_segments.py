@@ -105,12 +105,12 @@ def find_segments(
 
     print("Complete RAG contains %d nodes, %d edges"%(len(nodes), len(edges)))
 
-    out_dir = os.path.join(fragments_file, 'frag_set_lut')
+    out_dir = os.path.join(
+        fragments_file,
+        'luts',
+        'fragment_segment')
 
-    try:
-        out_dir = os.mkdir(out_dir)
-    except:
-        pass
+    out_dir = os.makedirs(out_dir, exist_ok=True)
 
     thresholds = list(np.arange(
         thresholds_minmax[0],
@@ -145,7 +145,7 @@ def find_segments(
 
         out_file = os.path.join(out_dir, lookup)
 
-        np.save(out_file, lut)
+        np.savez_compress(out_file, fragment_segment_lut=lut)
 
         print("%.3fs"%(time.time() - start))
 
