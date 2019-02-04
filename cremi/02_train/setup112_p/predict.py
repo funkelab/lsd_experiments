@@ -6,10 +6,9 @@ import logging
 import numpy as np
 import os
 import sys
+import pymongo
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
-
-print('setup directory:', setup_dir)
 
 with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
     net_config = json.load(f)
@@ -17,86 +16,123 @@ with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
 # voxels
 input_shape = Coordinate(net_config['input_shape'])
 output_shape = Coordinate(net_config['output_shape'])
-context = (input_shape - output_shape)//2
-print("Context is %s"%(context,))
 
 # nm
 voxel_size = Coordinate((40, 4, 4))
-context_nm = context*voxel_size
-
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
+
+def block_done_callback(
+        db_host,
+        db_name,
+        worker_config,
+        block,
+        start,
+        duration):
+
+    print("Recording block-done for %s" % (block,))
+
+    client = pymongo.MongoClient(db_host)
+    db = client[db_name]
+    collection = db['blocks_predicted']
+
+    document = dict(worker_config)
+    document.update({
+        'block_id': block.block_id,
+        'read_roi': (block.read_roi.get_begin(), block.read_roi.get_shape()),
+        'write_roi': (block.write_roi.get_begin(), block.write_roi.get_shape()),
+        'start': start,
+        'duration': duration
+    })
+
+    collection.insert(document)
+
+    print("Recorded block-done for %s" % (block,))
 
 def predict(
         iteration,
         raw_file,
         raw_dataset,
-        lsds_file,
-        lsds_dataset,
-        read_roi,
+        auto_file,
+        auto_dataset,
         out_file,
-        out_dataset):
-
+        out_dataset,
+        db_host,
+        db_name,
+        worker_config,
+        **kwargs):
 
     raw = ArrayKey('RAW')
-    lsds = ArrayKey('LSDS')
+    auto = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
-
     chunk_request.add(raw, input_size)
-    chunk_request.add(lsds, input_size)
+    chunk_request.add(auto, input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
-        (
-            ZarrSource(
-                raw_file,
-                datasets = {
-                    raw: raw_dataset
-                },
-                array_specs = {
-                    raw: ArraySpec(interpolatable=True)
-                }
-            ) +
-            Pad(raw, size=None) +
-            Crop(raw, read_roi) +
-            Normalize(raw) +
-            IntensityScaleShift(raw, 2,-1),
+            (
+                ZarrSource(
+                    raw_file,
+                    datasets = {
+                        raw: raw_dataset
+                    },
+                    array_specs = {
+                        raw: ArraySpec(interpolatable=True)
+                    }
+                ) +
+                Pad(raw, size=None) +
+                Normalize(raw) +
+                IntensityScaleShift(raw, 2,-1),
 
-            ZarrSource(
-                lsds_file,
-                datasets = {
-                    lsds: lsds_dataset
+                ZarrSource(
+                    auto_file,
+                    datasets = {
+                        auto: auto_dataset
+                    },
+                    array_specs = {
+                        auto: ArraySpec(interpolatable=True)
+                    }
+                ) +
+                Pad(auto, size=None)
+            ) +
+            MergeProvider() +
+            Predict(
+                checkpoint=os.path.join(
+                    setup_dir,
+                    'train_net_checkpoint_%d'%iteration),
+                graph=os.path.join(setup_dir, 'test_net.meta'),
+                inputs={
+                    net_config['pretrained_lsd']: auto,
+                    net_config['raw']: raw
+                },
+                outputs={
+                    net_config['affs']: affs
                 }
             ) +
-            Pad(lsds, size=None) +
-            Crop(lsds, read_roi)
-        ) +
-        MergeProvider() +
-        Predict(
-            checkpoint=os.path.join(
-                setup_dir,
-                'train_net_checkpoint_%d'%iteration),
-            graph=os.path.join(setup_dir, 'test_net.meta'),
-            inputs={
-                net_config['pretrained_lsd']: lsds,
-                net_config['raw']: raw
-            },
-            outputs={
-                net_config['affs']: affs
-            }
-        ) +
-        IntensityScaleShift(affs, 255, 0) +
-        ZarrWrite(
-            dataset_names={
-                affs: out_dataset,
-            },
-            output_filename=out_file
-        ) +
-        PrintProfilingStats(every=10) +
-        Scan(chunk_request, num_workers=10)
-    )
+            IntensityScaleShift(affs, 255, 0) +
+            ZarrWrite(
+                dataset_names={
+                    affs: out_dataset,
+                },
+                output_filename=out_file
+            ) +
+            PrintProfilingStats(every=10)+
+            DaisyRequestBlocks(
+                chunk_request,
+                roi_map={
+                    raw: 'read_roi',
+                    auto: 'read_roi',
+                    affs: 'write_roi'
+                },
+                num_workers=worker_config['num_cache_workers'],
+                block_done_callback=lambda b, s, d: block_done_callback(
+                    db_host,
+                    db_name,
+                    worker_config,
+                    b, s, d))
+            )
 
     print("Starting prediction...")
     with build(pipeline):
@@ -112,20 +148,4 @@ if __name__ == "__main__":
     with open(config_file, 'r') as f:
         run_config = json.load(f)
 
-    read_roi = Roi(
-        run_config['read_begin'],
-        run_config['read_size'])
-    write_roi = read_roi.grow(-context_nm, -context_nm)
-
-    print("Read ROI in nm is %s"%read_roi)
-    print("Write ROI in nm is %s"%write_roi)
-
-    predict(
-        run_config['iteration'],
-        run_config['raw_file'],
-        run_config['raw_dataset'],
-        run_config['lsds_file'],
-        run_config['lsds_dataset'],
-        read_roi,
-        run_config['out_file'],
-        run_config['out_dataset'])
+    predict(**run_config)
