@@ -8,6 +8,7 @@ import numpy as np
 import sklearn.metrics
 import sys
 import time
+import waterz
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -145,6 +146,12 @@ def evaluate(
         print("RI split %.5f"%rand_split)
         print("RI merge %.5f"%rand_merge)
         print("RI total %.5f"%(rand_split + rand_merge))
+
+        # waterz evaluation
+        report = waterz.evaluate(
+            np.array([[component_ids]]),
+            np.array([[segment_ids]]))
+        print(report)
 
         # # get most merging segments
 
