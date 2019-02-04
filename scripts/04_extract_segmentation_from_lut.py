@@ -1,5 +1,5 @@
-from pymongo import MongoClient
 import daisy
+import os
 import json
 import logging
 from funlib.segment.arrays import replace_values
@@ -12,60 +12,31 @@ logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
 
 def segment_in_block(
         block,
-        db_host,
-        db_name,
-        fragment_segment_collection,
+        fragments_file,
+        fragment_segment_lut,
         segmentation,
         fragments):
 
     logging.info("Copying fragments to memory...")
     start = time.time()
     fragments = fragments.to_ndarray(block.write_roi)
-    fragment_ids = np.unique(fragments)
     logging.info("%.3fs"%(time.time() - start))
-
-    logging.info("Found %d fragments"%len(fragment_ids))
 
     # get segments
 
-    client = MongoClient(db_host)
-    database = client[db_name]
-    collection = database[fragment_segment_collection]
+    lut = os.path.join(fragments_file, fragment_segment_lut)
+    assert os.path.exists(lut), "%s does not exist" % lut
 
     logging.info("Reading fragment-segment LUT...")
-    start = time.time()
-    fragments_map = collection.find(
-        {
-            'fragment': { '$in': list([ int(f) for f in fragment_ids]) },
-        })
+    lut = np.load(lut)
     logging.info("%.3fs"%(time.time() - start))
 
-    fragments_map = list(fragments_map)
-    logging.info("Found segments for %d fragments"%len(fragments_map))
+    logging.info("Found %d fragments in LUT"%len(lut[0]))
 
-    logging.info("Building fragments map...")
-    fragments_map = {
-        f['fragment']: f['segment']
-        for f in fragments_map
-    }
-
-    segment_ids = np.array([
-        fragments_map.get(fragment, fragment)
-        for fragment in fragment_ids
-    ], dtype=fragments.dtype)
-    logging.info("%.3fs"%(time.time() - start))
-
-    # shift fragment values to potentially save memory when relabeling
-    min_fragment = fragment_ids.min()
-    offset = 0
-    if min_fragment > 0:
-        offset = fragment_ids.dtype.type(min_fragment - 1)
-        fragments -= offset
-        fragment_ids -= offset
-
-    logging.info("Mapping fragments to %d segments", len(segment_ids))
+    num_segments = len(np.unique(lut[1]))
+    logging.info("Relabelling fragments to %d segments", num_segments)
     start = time.time()
-    relabelled = replace_values(fragments, fragment_ids, segment_ids)
+    relabelled = replace_values(fragments, lut[0], lut[1])
     logging.info("%.3fs"%(time.time() - start))
 
     segmentation[block.write_roi] = relabelled
@@ -73,11 +44,9 @@ def segment_in_block(
 def extract_segmentation(
         fragments_file,
         fragments_dataset,
+        fragment_segment_lut,
         out_file,
         out_dataset,
-        db_host,
-        db_name,
-        fragment_segment_collection,
         num_workers,
         roi_offset=None,
         roi_shape=None,
@@ -112,9 +81,8 @@ def extract_segmentation(
         write_roi,
         lambda b: segment_in_block(
             b,
-            db_host,
-            db_name,
-            fragment_segment_collection,
+            fragments_file,
+            fragment_segment_lut,
             segmentation,
             fragments),
         fit='shrink',
