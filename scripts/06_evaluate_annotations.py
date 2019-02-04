@@ -13,6 +13,185 @@ import waterz
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def read_synaptic_sites(
+        db_host,
+        skeleton_db_name,
+        synapse_nodes_collection,
+        roi):
+    '''Get a dict from synaptic site ID to a dict with 'location' and
+    'neuron_id' for each synapse annotation in the given ROI.'''
+
+    print("Reading synaptic sites...")
+    start = time.time()
+
+    client = MongoClient(db_host)
+    database = client[skeleton_db_name]
+    collection = database[synapse_nodes_collection]
+
+    bz, by, bx = roi.get_begin()
+    ez, ey, ex = roi.get_end()
+
+    synaptic_sites = collection.find(
+        {
+            'z': { '$gte': bz, '$lt': ez },
+            'y': { '$gte': by, '$lt': ey },
+            'x': { '$gte': bx, '$lt': ex },
+            'type': { '$in': [ 'syncenter', 'post_neuron' ] }
+        })
+
+    # synaptic site IDs are not unique, renumber them here
+    synaptic_sites = [
+        {
+            'id': i + 1,
+            'z': s['z'],
+            'y': s['y'],
+            'x': s['x'],
+            'neuron_id': s['neuron_id'],
+            'type': 'pre' if s['type'] == 'syncenter' else 'post'
+        }
+        for i, s in enumerate(synaptic_sites)
+    ]
+
+    print("%d synaptic sites found in %.3fs"%(
+        len(synaptic_sites),
+        time.time() - start))
+
+    return synaptic_sites
+
+def get_site_fragment_lut(fragments, synaptic_sites, roi):
+    '''Get the fragment IDs of all the synaptic sites that are contained in the
+    given ROI.'''
+
+    synaptic_sites = list(synaptic_sites)
+
+    if len(synaptic_sites) == 0:
+        print("No synaptic sites in %s, skipping"%roi)
+        return None
+
+    print("Getting fragment IDs for %d synaptic sites in %s..."%(
+        len(synaptic_sites), roi))
+
+    # for a few sites, direct lookup is faster than memory copies
+    if len(synaptic_sites) >= 15:
+
+        print("Copying fragments into memory...")
+        start = time.time()
+        fragments = fragments[roi]
+        fragments.materialize()
+        print("%.3fs"%(time.time() - start,))
+
+    print("Getting fragment IDs for synaptic sites in %s..."%roi)
+    start = time.time()
+
+    fragment_ids = np.array([
+        fragments[daisy.Coordinate((site['z'], site['y'], site['x']))]
+        for site in synaptic_sites
+    ])
+    synaptic_site_ids = np.array(
+        [site['id'] for site in synaptic_sites],
+        dtype=np.uint64)
+
+    print("Got fragment IDs for %d sites in %.3fs"%(
+        len(fragment_ids),
+        time.time() - start))
+
+    lut = np.array([fragment_ids, synaptic_site_ids])
+
+    return lut
+
+def store_lut_in_block(
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        site_fragment_lut_directory,
+        fragments,
+        sites,
+        block):
+
+    print("Finding fragment IDs in block %s"%block)
+
+    # get synaptic sites
+    client = MongoClient(annotations_db_host)
+    database = client[annotations_db_name]
+    skeletons_collection = \
+            database[annotations_skeletons_collection_name + '.nodes']
+
+    bz, by, bx = block.read_roi.get_begin()
+    ez, ey, ex = block.read_roi.get_end()
+
+    site_nodes = skeletons_collection.find(
+        {
+            'z': { '$gte': bz, '$lt': ez },
+            'y': { '$gte': by, '$lt': ey },
+            'x': { '$gte': bx, '$lt': ex },
+            'id': { '$in': sites }
+        })
+
+    # get synaptic site -> fragment ID
+    site_fragment_lut = get_site_fragment_lut(
+        fragments,
+        site_nodes,
+        block.write_roi)
+
+    if site_fragment_lut is None:
+        return
+
+    # store LUT
+    block_lut_path = os.path.join(
+        site_fragment_lut_directory,
+        str(block.block_id) + '.npz')
+    np.savez_compressed(block_lut_path, site_fragment_lut=site_fragment_lut)
+
+def prepare_evaluate(
+        fragments_file,
+        fragments_dataset,
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        annotations_synapses_collection_name,
+        **kwargs):
+
+    # open fragments
+    fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r')
+    roi = fragments.roi
+
+    # 1. find all synaptic sites
+    client = MongoClient(annotations_db_host)
+    database = client[annotations_db_name]
+    synapses = database[annotations_synapses_collection_name + '.edges']
+
+    sites = synapses.find()
+    sites = list(set(
+        s
+        for ss in sites
+        for s in [ss['source'], ss['target']]
+    ))
+
+    site_fragment_lut_directory = os.path.join(
+        fragments_file,
+        'luts/site_fragment')
+
+    if os.path.exists(site_fragment_lut_directory):
+        logger.warn("site-fragment LUT already exists, skipping preparation")
+        return
+    os.makedirs(site_fragment_collection_name)
+
+    # 2. store site->fragement ID LUT in file, for each block
+    daisy.run_blockwise(
+        roi,
+        daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
+        daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
+        lambda b: store_lut_in_block(
+            annotations_db_host,
+            annotations_db_name,
+            annotations_skeletons_collection_name,
+            site_fragment_lut_directory,
+            fragments,
+            sites,
+            b),
+        num_workers=num_workers,
+        fit='shrink')
+
 def comb2(n):
     return comb(n, 2, exact=1)
 
@@ -30,22 +209,29 @@ def rand_index(labels_true, labels_pred):
     return rand_split, rand_merge
 
 def evaluate(
-        seg_db_host,
-        seg_db_name,
-        edges_collection,
+        fragments_file,
+        fragments_dataset,
+        fragment_segment_lut,
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name,
+        annotations_synapses_collection_name,
         roi_offset,
         roi_shape,
         thresholds_minmax,
         thresholds_step,
         **kwargs):
 
+    prepare_evaluate(
+        fragments_file,
+        fragments_dataset,
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        annotations_synapses_collection_name)
+
     roi = daisy.Roi(roi_offset, roi_shape)
 
-    seg_client = MongoClient(seg_db_host)
-    seg_database = seg_client[seg_db_name]
     annotations_client = MongoClient(annotations_db_host)
     annotations_database = annotations_client[annotations_db_name]
 
@@ -76,27 +262,24 @@ def evaluate(
     # get all synaptic sites with their fragment ID
     print("Fetching site-fragment LUT...")
     start = time.time()
-    site_fragment_collection = seg_database['synaptic_site_fragments']
-    site_fragment_lut = list(site_fragment_collection.find())
-    site_fragment_lut = {
-        s['synaptic_site_id']: s['fragment_id']
-        for s in site_fragment_lut
-        if skeletons.has_node(s['synaptic_site_id'])
-    }
-    print("Found %d synaptic sites" % len(site_fragment_lut))
-    print("%.3fs"%(time.time() - start))
-
-    print("Getting all relevant fragment IDs...")
-    start = time.time()
-    fragment_ids = np.unique(np.array(list(site_fragment_lut.values())))
-    print("Found %d relevant fragment IDs" % len(fragment_ids))
+    lut_files = glob.glob(
+        os.path.join(
+            fragments_file,
+            'luts/site_fragment/*.npz'))
+    site_fragment_lut = np.concatenate(
+        [
+            np.load(f)['site_fragment_lut']
+            for f in lut_files
+        ],
+        axis=1)
+    print("Found %d synaptic sites in site-fragment LUT" % len(site_fragment_lut[0]))
     print("%.3fs"%(time.time() - start))
 
     # array with skeleton component ID for each site
     # (does not change between thresholds)
     component_ids = np.array([
         skeletons.nodes[site]['component_id']
-        for site in site_fragment_lut.keys()
+        for site in site_fragment_lut[0]
     ])
 
     for threshold in np.arange(
@@ -104,36 +287,27 @@ def evaluate(
             thresholds_minmax[1],
             thresholds_step):
 
-        lut_collection_name = 'seg_%s_%d'%(edges_collection,int(threshold*100))
-
+        fragment_segment_lut_file = os.path.join(
+            fragments_file,
+            'luts',
+            'fragment_segment',
+            'seg_%s_%d.npz'%(edges_collection,int(threshold*100)))
 
         # get fragment-segment LUT
-        print("Fetching fragment-segment LUT...")
+        print("Reading fragment-segment LUT...")
         start = time.time()
-        lut_collection = seg_database[lut_collection_name]
-        fragment_segment_lut = list(lut_collection.find({
-            'fragment': {'$in': list(int(x) for x in fragment_ids) }
-        }))
-        fragment_segment_lut = {
-            f['fragment']: f['segment']
-            for f in fragment_segment_lut
-        }
+        fragment_segment_lut = np.load(
+            fragment_segment_lut_file)['fragment_segment_lut']
         print("%.3fs"%(time.time() - start))
 
-        # add segment ID to each site
+        # get the segment ID for each site
         print("Mapping sites to segments...")
         start = time.time()
-        site_segment_lut = {
-            s: fragment_segment_lut[f]
-            for s, f in site_fragment_lut.items()
-        }
+        segment_ids = funlib.segment.arrays.replace_values(
+            site_fragment_lut[1],
+            fragment_segment_lut[0],
+            fragment_segment_lut[1])
         print("%.3fs"%(time.time() - start))
-
-        # array with segment ID for each site
-        segment_ids = np.array([
-            site_segment_lut[site]
-            for site in site_fragment_lut.keys()
-        ])
 
         # compute RAND index
 
