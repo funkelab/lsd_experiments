@@ -1,14 +1,17 @@
 from funlib.segment.graphs import find_connected_components
+from funlib.segment.arrays import replace_values
 from pymongo import MongoClient
-from scipy.special import comb
+# from scipy.special import comb
 import daisy
 import json
 import logging
 import numpy as np
-import sklearn.metrics
+# import sklearn.metrics
 import sys
 import time
 import waterz
+import os
+import glob
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,7 +98,7 @@ def get_site_fragment_lut(fragments, synaptic_sites, roi):
         len(fragment_ids),
         time.time() - start))
 
-    lut = np.array([fragment_ids, synaptic_site_ids])
+    lut = np.array([synaptic_site_ids, fragment_ids])
 
     return lut
 
@@ -174,7 +177,7 @@ def prepare_evaluate(
     if os.path.exists(site_fragment_lut_directory):
         logger.warn("site-fragment LUT already exists, skipping preparation")
         return
-    os.makedirs(site_fragment_collection_name)
+    os.makedirs(site_fragment_lut_directory)
 
     # 2. store site->fragement ID LUT in file, for each block
     daisy.run_blockwise(
@@ -189,29 +192,29 @@ def prepare_evaluate(
             fragments,
             sites,
             b),
-        num_workers=num_workers,
+        num_workers=40,
         fit='shrink')
 
-def comb2(n):
-    return comb(n, 2, exact=1)
+# def comb2(n):
+    # return comb(n, 2, exact=1)
 
-def rand_index(labels_true, labels_pred):
+# def rand_index(labels_true, labels_pred):
 
-    contingency = sklearn.metrics.cluster.contingency_matrix(labels_true, labels_pred, sparse=True)
+    # contingency = sklearn.metrics.cluster.contingency_matrix(labels_true, labels_pred, sparse=True)
 
-    sum_squares_ij = sum(n_ij*n_ij for n_ij in contingency.data)
-    sum_squares_i = sum(n_i*n_i for n_i in np.ravel(contingency.sum(axis=1)))
-    sum_squares_j = sum(n_j*n_j for n_j in np.ravel(contingency.sum(axis=0)))
+    # sum_squares_ij = sum(n_ij*n_ij for n_ij in contingency.data)
+    # sum_squares_i = sum(n_i*n_i for n_i in np.ravel(contingency.sum(axis=1)))
+    # sum_squares_j = sum(n_j*n_j for n_j in np.ravel(contingency.sum(axis=0)))
 
-    rand_split = sum_squares_ij/sum_squares_i
-    rand_merge = sum_squares_ij/sum_squares_j
+    # rand_split = sum_squares_ij/sum_squares_i
+    # rand_merge = sum_squares_ij/sum_squares_j
 
-    return rand_split, rand_merge
+    # return rand_split, rand_merge
 
 def evaluate(
         fragments_file,
         fragments_dataset,
-        fragment_segment_lut,
+        edges_collection,
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name,
@@ -232,9 +235,6 @@ def evaluate(
 
     roi = daisy.Roi(roi_offset, roi_shape)
 
-    annotations_client = MongoClient(annotations_db_host)
-    annotations_database = annotations_client[annotations_db_name]
-
     # get all skeletons
     skeletons_provider = daisy.persistence.MongoDbGraphProvider(
         annotations_db_name,
@@ -249,6 +249,15 @@ def evaluate(
     skeletons = skeletons_provider[roi]
     print("Found %d skeleton nodes" % skeletons.number_of_nodes())
     print("%.3fs"%(time.time() - start))
+
+    # remove outside edges and nodes
+    remove_nodes = []
+    for node, data in skeletons.nodes(data=True):
+        if 'z' not in data:
+            remove_nodes.append(node)
+    print("Removing %d nodes that were outside of ROI"%len(remove_nodes))
+    for node in remove_nodes:
+        skeletons.remove_node(node)
 
     # relabel connected components
     print("Relabeling skeleton components...")
@@ -275,6 +284,16 @@ def evaluate(
     print("Found %d synaptic sites in site-fragment LUT" % len(site_fragment_lut[0]))
     print("%.3fs"%(time.time() - start))
 
+    # limit to relevant sites within requested ROI
+    relevant_mask = np.array([
+        skeletons.has_node(site)
+        for site in site_fragment_lut[0]
+    ])
+    site_fragment_lut = site_fragment_lut[:,relevant_mask]
+    print("Limited to %d synaptic sites within ROI"%len(site_fragment_lut[0]))
+    if len(site_fragment_lut[0]) < 100:
+        print("Found sites: ", site_fragment_lut[0])
+
     # array with skeleton component ID for each site
     # (does not change between thresholds)
     component_ids = np.array([
@@ -287,15 +306,14 @@ def evaluate(
             thresholds_minmax[1],
             thresholds_step):
 
+        # get fragment-segment LUT
+        print("Reading fragment-segment LUT...")
+        start = time.time()
         fragment_segment_lut_file = os.path.join(
             fragments_file,
             'luts',
             'fragment_segment',
             'seg_%s_%d.npz'%(edges_collection,int(threshold*100)))
-
-        # get fragment-segment LUT
-        print("Reading fragment-segment LUT...")
-        start = time.time()
         fragment_segment_lut = np.load(
             fragment_segment_lut_file)['fragment_segment_lut']
         print("%.3fs"%(time.time() - start))
@@ -303,28 +321,31 @@ def evaluate(
         # get the segment ID for each site
         print("Mapping sites to segments...")
         start = time.time()
-        segment_ids = funlib.segment.arrays.replace_values(
+        segment_ids = replace_values(
             site_fragment_lut[1],
             fragment_segment_lut[0],
             fragment_segment_lut[1])
         print("%.3fs"%(time.time() - start))
 
+        num_not_changed = (segment_ids == site_fragment_lut[1]).sum()
+        print("%d site segments have same ID as fragment"%num_not_changed)
+
         # compute RAND index
 
         print("%d synaptic sites associated with segments"%segment_ids.size)
 
-        arand = sklearn.metrics.adjusted_rand_score(component_ids, segment_ids)
-        print("ARI: %.5f"%arand)
+        # arand = sklearn.metrics.adjusted_rand_score(component_ids, segment_ids)
+        # print("ARI: %.5f"%arand)
 
-        rand_split, rand_merge = rand_index(component_ids, segment_ids)
-        print("RI split %.5f"%rand_split)
-        print("RI merge %.5f"%rand_merge)
-        print("RI total %.5f"%(rand_split + rand_merge))
+        # rand_split, rand_merge = rand_index(component_ids, segment_ids)
+        # print("RI split %.5f"%rand_split)
+        # print("RI merge %.5f"%rand_merge)
+        # print("RI total %.5f"%(rand_split + rand_merge))
 
         # waterz evaluation
         report = waterz.evaluate(
-            np.array([[component_ids]]),
-            np.array([[segment_ids]]))
+            np.array([[segment_ids]]),
+            np.array([[component_ids]]))
         print(report)
 
         # # get most merging segments
