@@ -13,7 +13,7 @@ logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
 def segment_in_block(
         block,
         fragments_file,
-        fragment_segment_lut,
+        lut_filename,
         segmentation,
         fragments):
 
@@ -24,7 +24,11 @@ def segment_in_block(
 
     # get segments
 
-    lut = os.path.join(fragments_file, fragment_segment_lut)
+    lut = os.path.join(
+        fragments_file,
+        'luts',
+        'fragment_segment',
+        lut_filename + '.npz')
     assert os.path.exists(lut), "%s does not exist" % lut
 
     logging.info("Reading fragment-segment LUT...")
@@ -44,7 +48,8 @@ def segment_in_block(
 def extract_segmentation(
         fragments_file,
         fragments_dataset,
-        fragment_segment_lut,
+        edges_collection,
+        threshold,
         out_file,
         out_dataset,
         num_workers,
@@ -75,6 +80,8 @@ def extract_segmentation(
         dtype=np.uint64,
         write_roi=write_roi)
 
+    lut_filename = 'seg_%s_%d' % (edges_collection, int(threshold*100))
+
     daisy.run_blockwise(
         total_roi,
         read_roi,
@@ -82,7 +89,7 @@ def extract_segmentation(
         lambda b: segment_in_block(
             b,
             fragments_file,
-            fragment_segment_lut,
+            lut_filename,
             segmentation,
             fragments),
         fit='shrink',
