@@ -5,6 +5,7 @@ import sys
 import time
 import os
 import numpy as np
+import multiprocessing as mp
 from funlib.segment.graphs.impl import connected_components
 
 logging.basicConfig(level=logging.INFO)
@@ -75,30 +76,73 @@ def find_segments(
         thresholds_minmax[1],
         thresholds_step))
 
+
+    # pool = mp.Pool(processes=60)
+    # for threshold in thresholds:
+        # pool.apply_async(
+                # create_lut,
+                # args=(
+                    # edges_collection,
+                    # out_dir,
+                    # nodes,
+                    # edges,
+                    # scores,
+                    # threshold)
+                # )
+    # pool.close()
+    # pool.join()
+
+    procs = []
+    start = time.time()
+
     for threshold in thresholds:
+        proc = mp.Process(
+                target=create_lut,
+                args=(
+                    edges_collection,
+                    out_dir,
+                    nodes,
+                    edges,
+                    scores,
+                    threshold))
+        procs.append(proc)
+        proc.start()
 
-        print("Getting CCs for threshold %.3f..." % threshold)
-        start = time.time()
-        components = connected_components(nodes, edges, scores, threshold)
-        print("%.3fs" % (time.time() - start))
+    for proc in procs:
+        proc.join()
 
-        print("Creating fragment-segment LUT...")
-        start = time.time()
-        lut = np.array([nodes, components])
+    print("Created and stored lookup tables in %.3fs" % (time.time() - start))
 
-        print("%.3fs" % (time.time() - start))
+def create_lut(
+        edges_collection,
+        out_dir,
+        nodes,
+        edges,
+        scores,
+        threshold,
+        **kwargs):
 
-        print("Storing fragment-segment LUT...")
-        start = time.time()
+    print("Getting CCs for threshold %.3f..." % threshold)
+    start = time.time()
+    components = connected_components(nodes, edges, scores, threshold)
+    print("%.3fs" % (time.time() - start))
 
-        lookup = 'seg_%s_%d' % (edges_collection, int(threshold*100))
+    print("Creating fragment-segment LUT for threshold %.3f..." % threshold)
+    start = time.time()
+    lut = np.array([nodes, components])
 
-        out_file = os.path.join(out_dir, lookup)
+    print("%.3fs" % (time.time() - start))
 
-        np.savez_compressed(out_file, fragment_segment_lut=lut)
+    print("Storing fragment-segment LUT for threshold %.3f..." % threshold)
+    start = time.time()
 
-        print("%.3fs" % (time.time() - start))
+    lookup = 'seg_%s_%d' % (edges_collection, int(threshold*100))
 
+    out_file = os.path.join(out_dir, lookup)
+
+    np.savez_compressed(out_file, fragment_segment_lut=lut)
+
+    print("%.3fs" % (time.time() - start))
 
 if __name__ == "__main__":
 
