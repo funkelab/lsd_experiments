@@ -1,5 +1,6 @@
 from funlib.segment.graphs import find_connected_components
 from funlib.segment.arrays import replace_values
+from funlib.evaluate import rand_voi
 from pymongo import MongoClient
 # from scipy.special import comb
 import daisy
@@ -9,7 +10,6 @@ import numpy as np
 # import sklearn.metrics
 import sys
 import time
-import waterz
 import os
 import glob
 
@@ -334,37 +334,25 @@ def evaluate(
 
         print("%d synaptic sites associated with segments"%segment_ids.size)
 
-        # arand = sklearn.metrics.adjusted_rand_score(component_ids, segment_ids)
-        # print("ARI: %.5f"%arand)
-
-        # rand_split, rand_merge = rand_index(component_ids, segment_ids)
-        # print("RI split %.5f"%rand_split)
-        # print("RI merge %.5f"%rand_merge)
-        # print("RI total %.5f"%(rand_split + rand_merge))
-
-        # waterz evaluation
-        report = waterz.evaluate(
+        report = rand_roi.evaluate(
+            np.array([[component_ids]]),
             np.array([[segment_ids]]),
-            np.array([[component_ids]]))
-        print(report)
+            return_cluster_scores=True)
 
-        # # get most merging segments
+        print("VOI split: ", report['voi_split'])
+        print("VOI merge: ", report['voi_merge'])
 
-        # segment_to_neurons = {}
-        # for site in synaptic_sites:
-            # segment_id = site['segment_id']
-            # if segment_id is None:
-                # continue
-            # if segment_id not in segment_to_neurons:
-                # segment_to_neurons[segment_id] = set()
-            # segment_to_neurons[site['segment_id']].add(site['neuron_id'])
+        # get most severe splits/merges
+        splits = sorted([(s, i) for (i, s) in report['voi_split_i']])
+        merges = sorted([(s, j) for (j, s) in report['voi_merge_j']])
 
-        # merges = list(segment_to_neurons.items())
-        # merges.sort(key=lambda x: len(x[1]))
-
-        # print("Largest mergers:")
-        # for m in merges[-10:]:
-            # print("%d: merges %d neurons"%(m[0], len(m[1])))
+        print("10 worst splits:")
+        for (s, i) in splits[-10,:]:
+            print("\tcomponent %d\tVOI split %.5f" % (i, s))
+        print()
+        print("10 worst merges:")
+        for (s, i) in merges[-10,:]:
+            print("\tsegment %d\tVOI merge %.5f" % (i, s))
 
 if __name__ == "__main__":
 
