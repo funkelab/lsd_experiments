@@ -32,7 +32,7 @@ def segment_in_block(
     assert os.path.exists(lut), "%s does not exist" % lut
 
     logging.info("Reading fragment-segment LUT...")
-    lut = np.load(lut)
+    lut = np.load(lut)['fragment_segment_lut']
     logging.info("%.3fs"%(time.time() - start))
 
     logging.info("Found %d fragments in LUT"%len(lut[0]))
