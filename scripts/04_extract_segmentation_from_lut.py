@@ -15,7 +15,8 @@ def segment_in_block(
         fragments_file,
         lut_filename,
         segmentation,
-        fragments):
+        fragments,
+        lut):
 
     logging.info("Copying fragments to memory...")
     start = time.time()
@@ -23,19 +24,6 @@ def segment_in_block(
     logging.info("%.3fs"%(time.time() - start))
 
     # get segments
-
-    lut = os.path.join(
-        fragments_file,
-        'luts',
-        'fragment_segment',
-        lut_filename + '.npz')
-    assert os.path.exists(lut), "%s does not exist" % lut
-
-    logging.info("Reading fragment-segment LUT...")
-    lut = np.load(lut)['fragment_segment_lut']
-    logging.info("%.3fs"%(time.time() - start))
-
-    logging.info("Found %d fragments in LUT"%len(lut[0]))
 
     num_segments = len(np.unique(lut[1]))
     logging.info("Relabelling fragments to %d segments", num_segments)
@@ -66,10 +54,8 @@ def extract_segmentation(
                                       "also needs to be provided"
         total_roi = daisy.Roi(offset=roi_offset, shape=roi_shape)
 
-    write_roi = daisy.Roi((0, 0, 0), (1040, 1024, 1024))
-    read_roi = daisy.Roi((0, 0, 0), (1040, 1024, 1024))
-    # write_roi = daisy.Roi((0, 0, 0), (200, 256, 256))
-    # read_roi = daisy.Roi((0, 0, 0), (200, 256, 256))
+    read_roi = daisy.Roi((0, 0, 0), (5000, 5000, 5000))
+    write_roi = daisy.Roi((0, 0, 0), (5000, 5000, 5000))
 
     logging.info("Preparing segmentation dataset...")
     segmentation = daisy.prepare_ds(
@@ -82,6 +68,20 @@ def extract_segmentation(
 
     lut_filename = 'seg_%s_%d' % (edges_collection, int(threshold*100))
 
+    lut = os.path.join(
+        fragments_file,
+        'luts',
+        'fragment_segment',
+        lut_filename + '.npz')
+    assert os.path.exists(lut), "%s does not exist" % lut
+
+    start = time.time()
+    logging.info("Reading fragment-segment LUT...")
+    lut = np.load(lut)['fragment_segment_lut']
+    logging.info("%.3fs"%(time.time() - start))
+
+    logging.info("Found %d fragments in LUT"%len(lut[0]))
+
     daisy.run_blockwise(
         total_roi,
         read_roi,
@@ -91,7 +91,8 @@ def extract_segmentation(
             fragments_file,
             lut_filename,
             segmentation,
-            fragments),
+            fragments,
+            lut),
         fit='shrink',
         num_workers=num_workers,
         processes=True,
