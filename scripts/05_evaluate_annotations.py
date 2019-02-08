@@ -7,6 +7,7 @@ import daisy
 import json
 import logging
 import numpy as np
+import multiprocessing as mp
 # import sklearn.metrics
 import sys
 import time
@@ -195,26 +196,16 @@ def prepare_evaluate(
         num_workers=40,
         fit='shrink')
 
-# def comb2(n):
-    # return comb(n, 2, exact=1)
-
-# def rand_index(labels_true, labels_pred):
-
-    # contingency = sklearn.metrics.cluster.contingency_matrix(labels_true, labels_pred, sparse=True)
-
-    # sum_squares_ij = sum(n_ij*n_ij for n_ij in contingency.data)
-    # sum_squares_i = sum(n_i*n_i for n_i in np.ravel(contingency.sum(axis=1)))
-    # sum_squares_j = sum(n_j*n_j for n_j in np.ravel(contingency.sum(axis=0)))
-
-    # rand_split = sum_squares_ij/sum_squares_i
-    # rand_merge = sum_squares_ij/sum_squares_j
-
-    # return rand_split, rand_merge
-
 def evaluate(
+        experiment,
+        setup,
+        iteration,
         fragments_file,
         fragments_dataset,
+        edges_db_name,
         edges_collection,
+        scores_db_host,
+        scores_db_name,
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name,
@@ -232,6 +223,7 @@ def evaluate(
         annotations_db_name,
         annotations_skeletons_collection_name,
         annotations_synapses_collection_name)
+
 
     roi = daisy.Roi(roi_offset, roi_shape)
 
@@ -301,10 +293,55 @@ def evaluate(
         for site in site_fragment_lut[0]
     ])
 
-    for threshold in np.arange(
-            thresholds_minmax[0],
-            thresholds_minmax[1],
-            thresholds_step):
+    scores_config = {
+            'experiment': experiment,
+            'setup': setup,
+            'iteration': iteration,
+            'network_configuration': edges_db_name,
+            'merge_function': edges_collection.strip('edges_')
+            }
+
+    thresholds = list(np.arange(
+        thresholds_minmax[0],
+        thresholds_minmax[1],
+        thresholds_step))
+
+    procs = []
+
+    start = time.time()
+    for threshold in thresholds:
+        proc = mp.Process(
+                target=evaluate_parallel,
+                args=(
+                    fragments_file,
+                    edges_collection,
+                    site_fragment_lut,
+                    component_ids,
+                    threshold,
+                    scores_config,
+                    scores_db_host,
+                    scores_db_name
+                    ))
+        procs.append(proc)
+        proc.start()
+
+    for proc in procs:
+        proc.join()
+
+def evaluate_parallel(
+        fragments_file,
+        edges_collection,
+        site_fragment_lut,
+        component_ids,
+        threshold,
+        scores_config,
+        scores_db_host,
+        scores_db_name):
+
+        scores_client = MongoClient(scores_db_host)
+        scores_db = scores_client[scores_db_name]
+        scores_collection = scores_db['scores']
+
 
         # get fragment-segment LUT
         print("Reading fragment-segment LUT...")
@@ -334,24 +371,34 @@ def evaluate(
 
         print("%d synaptic sites associated with segments"%segment_ids.size)
 
-        report = rand_roi.evaluate(
+        report = rand_voi(
             np.array([[component_ids]]),
             np.array([[segment_ids]]),
             return_cluster_scores=True)
 
+        remove_keys = {'voi_split_i', 'voi_merge_j'}
+        updated_report = report.copy()
+        for k in remove_keys:
+            updated_report.pop(k, None)
+
+        updated_report.update({'threshold': threshold})
+        updated_report.update(scores_config)
+        scores_collection.insert(updated_report)
+
+        print("Calculating scores for threshold: ", threshold)
         print("VOI split: ", report['voi_split'])
         print("VOI merge: ", report['voi_merge'])
 
         # get most severe splits/merges
-        splits = sorted([(s, i) for (i, s) in report['voi_split_i']])
-        merges = sorted([(s, j) for (j, s) in report['voi_merge_j']])
+        splits = sorted([(s, i) for (i, s) in report['voi_split_i'].items()])
+        merges = sorted([(s, j) for (j, s) in report['voi_merge_j'].items()])
 
         print("10 worst splits:")
-        for (s, i) in splits[-10,:]:
+        for (s, i) in splits[-10:]:
             print("\tcomponent %d\tVOI split %.5f" % (i, s))
-        print()
+
         print("10 worst merges:")
-        for (s, i) in merges[-10,:]:
+        for (s, i) in merges[-10:]:
             print("\tsegment %d\tVOI merge %.5f" % (i, s))
 
 if __name__ == "__main__":
