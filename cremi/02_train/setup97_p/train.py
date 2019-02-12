@@ -56,6 +56,7 @@ def train_until(max_iteration):
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
+    context = output_size - input_size
 
     request = BatchRequest()
     request.add(raw, input_size)
@@ -88,7 +89,8 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(raw, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples

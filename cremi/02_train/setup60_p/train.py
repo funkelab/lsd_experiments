@@ -12,15 +12,17 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/training'
+data_dir = '../../01_data/glia_mask/'
+artifacts_dir = '../../01_data/training/'
+
 samples = [
-    'sample_A_padded_20160501.aligned.filled.cropped',
-    'sample_B_padded_20160501.aligned.filled.cropped',
-    'sample_C_padded_20160501.aligned.filled.cropped'
+    'sample_A',
+    'sample_B',
+    'sample_C'
 ]
 
 affinity_neighborhood = np.array([
-    
+
     [-1, 0, 0],
     [0, -1, 0],
     [0, 0, -1],
@@ -64,6 +66,7 @@ def train_until(max_iteration):
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
+    context = output_size - input_size
 
     request = BatchRequest()
     request.add(raw, input_size)
@@ -79,11 +82,11 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        Hdf5Source(
-            os.path.join(data_dir, sample + '.hdf'),
+        ZarrSource(
+            os.path.join(data_dir, sample + '.n5'),
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids_notransparency',
+                labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
@@ -93,7 +96,8 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(raw, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -101,7 +105,7 @@ def train_until(max_iteration):
 
     artifact_source = (
         Hdf5Source(
-            os.path.join(data_dir, 'sample_ABC_padded_20160501.defects.hdf'),
+            os.path.join(artifacts_dir, 'sample_ABC_padded_20160501.defects.hdf'),
             datasets = {
                 artifacts: 'defect_sections/raw',
                 artifacts_mask: 'defect_sections/mask',

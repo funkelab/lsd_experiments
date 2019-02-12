@@ -37,9 +37,9 @@ def add_malis_loss(graph):
     gt_affs = graph.get_tensor_by_name(config['gt_affs'])
     gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
     gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
-    
-    loss = malis.malis_loss_op(affs, 
-        gt_affs, 
+
+    loss = malis.malis_loss_op(affs,
+        gt_affs,
         gt_seg,
         neighborhood,
         gt_affs_mask)
@@ -84,6 +84,7 @@ def train_until(max_iteration):
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
+    context = output_size - input_size
 
     request = BatchRequest()
     request.add(raw, input_size)
@@ -114,7 +115,8 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(raw, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -223,7 +225,7 @@ def train_until(max_iteration):
                 config['affs']: affs_gradient
             },
             summary=train_summary,
-            log_dir='log', 
+            log_dir='log',
             save_every=10000)
 
     train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)

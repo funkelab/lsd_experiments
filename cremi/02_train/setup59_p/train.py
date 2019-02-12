@@ -12,11 +12,13 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/training'
+data_dir = '../../01_data/glia_mask/'
+artifacts_dir = '../../01_data/training/'
+
 samples = [
-    'sample_A_padded_20160501.aligned.filled.cropped',
-    'sample_B_padded_20160501.aligned.filled.cropped',
-    'sample_C_padded_20160501.aligned.filled.cropped'
+    'sample_A',
+    'sample_B',
+    'sample_C'
 ]
 
 neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
@@ -32,9 +34,9 @@ def add_malis_loss(graph):
     gt_affs = graph.get_tensor_by_name(config['gt_affs'])
     gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
     gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
-    
-    loss = malis.malis_loss_op(affs, 
-        gt_affs, 
+
+    loss = malis.malis_loss_op(affs,
+        gt_affs,
         gt_seg,
         neighborhood,
         gt_affs_mask)
@@ -79,6 +81,7 @@ def train_until(max_iteration):
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
+    context = output_size - input_size
 
     request = BatchRequest()
     request.add(raw, input_size)
@@ -95,11 +98,11 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        Hdf5Source(
-            os.path.join(data_dir, sample + '.hdf'),
+        ZarrSource(
+            os.path.join(data_dir, sample + '.n5'),
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids_notransparency',
+                labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
@@ -109,7 +112,8 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(raw, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -117,7 +121,7 @@ def train_until(max_iteration):
 
     artifact_source = (
         Hdf5Source(
-            os.path.join(data_dir, 'sample_ABC_padded_20160501.defects.hdf'),
+            os.path.join(artifacts_dir, 'sample_ABC_padded_20160501.defects.hdf'),
             datasets = {
                 artifacts: 'defect_sections/raw',
                 artifacts_mask: 'defect_sections/mask',
@@ -218,7 +222,7 @@ def train_until(max_iteration):
                 config['affs']: affs_gradient
             },
             summary=train_summary,
-            log_dir='log', 
+            log_dir='log',
             save_every=10000)
 
     train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
