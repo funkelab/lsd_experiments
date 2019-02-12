@@ -33,6 +33,14 @@ lsd_setup_dir = os.path.realpath(os.path.join(
 
 neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
+class EnsureUInt8(BatchFilter):
+
+    def __init__(self, array):
+        self.array = array
+
+    def process(self, batch, request):
+        batch[self.array].data = (batch[self.array].data*255.0).astype(np.uint8)
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -207,6 +215,8 @@ def train_until(max_iteration):
             outputs={
                 sd_config['embedding']: pretrained_lsd
             }) +
+        EnsureUInt8(pretrained_lsd) +
+        Normalize(pretrained_lsd) +
         Train(
             'train_affs_net',
             optimizer=context_config['optimizer'],
