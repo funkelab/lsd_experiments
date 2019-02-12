@@ -49,7 +49,8 @@ def train_until(max_iteration):
     voxel_size = Coordinate((40, 4, 4))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
-    context = output_size - input_size
+    context = output_size/2
+    print('CONTEXT: ', context)
 
     request = BatchRequest()
     request.add(raw, input_size)
