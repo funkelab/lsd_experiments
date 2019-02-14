@@ -3,39 +3,40 @@ from mala.networks.unet import crop_zyx
 import tensorflow as tf
 import json
 
-def create_affs_network(input_shape, output_shape, name):
+def create_auto(input_shape, output_shape, name):
 
     tf.reset_default_graph()
 
-    raw = tf.placeholder(tf.float32, shape=input_shape)
-    raw_batched = tf.reshape(raw, (1, 1) + input_shape)
+    with tf.variable_scope('setup58_p'):
+        raw = tf.placeholder(tf.float32, shape=input_shape)
+        raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
+        unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
 
-    affs_batched, _ = mala.networks.conv_pass(
-        unet,
-        kernel_sizes=[1],
-        num_fmaps=3,
-        activation='sigmoid',
-        name='affs')
+        affs_batched, _ = mala.networks.conv_pass(
+            unet,
+            kernel_sizes=[1],
+            num_fmaps=3,
+            activation='sigmoid',
+            name='affs')
 
-    affs_batched = crop_zyx(affs_batched, (1, 3) + output_shape)
-    affs = tf.reshape(affs_batched, (3,) + output_shape)
+        affs_batched = crop_zyx(affs_batched, (1, 3) + output_shape)
+        affs = tf.reshape(affs_batched, (3,) + output_shape)
 
-    print("input shape : %s"%(input_shape,))
-    print("output shape: %s"%(output_shape,))
+        print("input shape : %s"%(input_shape,))
+        print("output shape: %s"%(output_shape,))
 
-    tf.train.export_meta_graph(filename=name + '.meta')
+        tf.train.export_meta_graph(filename=name + '.meta')
 
-    config = {
-        'raw': raw.name,
-        'affs': affs.name,
-        'input_shape': input_shape,
-        'output_shape': output_shape}
-    with open(name + '.json', 'w') as f:
-        json.dump(config, f)
+        config = {
+            'raw': raw.name,
+            'affs': affs.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape}
+        with open(name + '.json', 'w') as f:
+            json.dump(config, f)
 
-def create_affs2_network(input_shape, intermediate_shape, expected_output_shape, name):
+def create_affs(input_shape, intermediate_shape, expected_output_shape, name):
 
     tf.reset_default_graph()
 
@@ -58,15 +59,17 @@ def create_affs2_network(input_shape, intermediate_shape, expected_output_shape,
         kernel_sizes=[1],
         num_fmaps=3,
         activation='sigmoid',
-        name='affs')
+        name='affs2')
+
     affs = tf.squeeze(affs_batched, axis=0)
 
-    output_shape = tuple(affs.get_shape().as_list()[1:])
-    assert expected_output_shape == output_shape, "%s !=%s"%(expected_output_shape, output_shape)
+    output_shape_batched = affs_batched.get_shape().as_list()
+    output_shape = output_shape_batched[1:] # strip the batch dimension
 
-    gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
-    affs_loss_weights = tf.placeholder(tf.float32, shape=(3,) + output_shape)
-    
+    affs = tf.reshape(affs_batched, output_shape)
+
+    gt_affs = tf.placeholder(tf.float32, shape=output_shape)
+    affs_loss_weights = tf.placeholder(tf.float32, shape=output_shape)
     loss = tf.losses.mean_squared_error(
         gt_affs,
         affs,
@@ -81,23 +84,20 @@ def create_affs2_network(input_shape, intermediate_shape, expected_output_shape,
         epsilon=1e-8)
     optimizer = opt.minimize(loss)
 
-    # output_shape = output_shape[1:]
-    print("input shape : %s"%(intermediate_shape,))
+    output_shape = output_shape[1:]
+    print("input shape : %s"%(input_shape,))
     print("output shape: %s"%(output_shape,))
 
     tf.train.export_meta_graph(filename=name + '.meta')
 
     config = {
-        'raw': raw.name,
-        'raw_cropped': raw_cropped.name,
-        'raw_in': raw_in.name,
         'pretrained_affs': pretrained_affs.name,
         'affs': affs.name,
         'gt_affs': gt_affs.name,
         'affs_loss_weights': affs_loss_weights.name,
         'loss': loss.name,
         'optimizer': optimizer.name,
-        'input_shape': intermediate_shape,
+        'input_shape': input_shape,
         'output_shape': output_shape,
         'summary': summary.name,
         }
@@ -112,28 +112,23 @@ def create_config(input_shape, output_shape, num_dims, name):
         'out_dims': num_dims,
         'out_dtype': 'uint8',
         'affs_setup': 'setup58_p',
-        'affs_iteration': 400000
+        'affs_iteration': 100000
         }
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
+    z=0
+    xy=0
+
     train_input_shape = (120, 484, 484)
     train_intermediate_shape = (84, 268, 268)
     train_output_shape = (48, 56, 56)
 
-    create_affs_network(train_input_shape, train_intermediate_shape, 'train_affs_net')
-    create_affs2_network(train_intermediate_shape, train_intermediate_shape, train_output_shape, 'train_net')
+    create_auto(train_input_shape, train_intermediate_shape, 'train_auto_net')
+    create_affs(train_input_shape, train_intermediate_shape, train_output_shape, 'train_net')
 
-    z=0
-    xy=0
+    #todo: figure out predict network shapes
 
-    test_input_shape = (120, 484, 484)
-    test_intermediate_shape = (84, 268, 268)
-    test_output_shape = (48, 56, 56)
-
-    create_affs2_network(test_input_shape, test_intermediate_shape, test_output_shape, 'test_net')
-
-    create_config(test_input_shape, test_output_shape, 3, 'config')
-
+    create_config(train_input_shape, train_output_shape, 3, 'config')

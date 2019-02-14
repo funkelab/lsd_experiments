@@ -12,11 +12,13 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/training'
+data_dir = '../../01_data/glia_mask/'
+artifacts_dir = '../../01_data/training/'
+
 samples = [
-    'sample_A_padded_20160501.aligned.filled.cropped',
-    'sample_B_padded_20160501.aligned.filled.cropped',
-    'sample_C_padded_20160501.aligned.filled.cropped'
+    'sample_A',
+    'sample_B',
+    'sample_C'
 ]
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
@@ -25,7 +27,7 @@ with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
     config = json.load(f)
 
 experiment_dir = os.path.join(setup_dir, '..', '..')
-affs_setup_dir = os.path.realpath(os.path.join(
+auto_setup_dir = os.path.realpath(os.path.join(
     experiment_dir,
     '02_train',
     config['affs_setup']))
@@ -54,7 +56,7 @@ def train_until(max_iteration):
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    with open('train_affs_net.json', 'r') as f:
+    with open('train_auto_net.json', 'r') as f:
         affs_1_config = json.load(f)
     with open('train_net.json', 'r') as f:
         affs_2_config = json.load(f)
@@ -64,6 +66,7 @@ def train_until(max_iteration):
     affs_2_input_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     pretrained_affs_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     output_size = Coordinate(affs_2_config['output_shape'])*voxel_size
+    context = output_size/2
 
     request = BatchRequest()
     request.add(raw, affs_1_input_size)
@@ -81,12 +84,12 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        Hdf5Source(
-            os.path.join(data_dir, sample + '.hdf'),
+        ZarrSource(
+            os.path.join(data_dir, sample + '.n5'),
             datasets = {
                 raw: 'volumes/raw',
                 raw_cropped: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids_notransparency',
+                labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
@@ -98,8 +101,8 @@ def train_until(max_iteration):
         ) +
         Normalize(raw) +
         Normalize(raw_cropped) +
-        Pad(raw, None) +
-        Pad(raw_cropped, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -107,7 +110,7 @@ def train_until(max_iteration):
 
     artifact_source = (
         Hdf5Source(
-            os.path.join(data_dir, 'sample_ABC_padded_20160501.defects.hdf'),
+            os.path.join(artifacts_dir, 'sample_ABC_padded_20160501.defects.hdf'),
             datasets = {
                 artifacts: 'defect_sections/raw',
                 artifacts_mask: 'defect_sections/mask',
@@ -184,8 +187,10 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup58_p/train_net_checkpoint_400000',
-            graph='train_affs_net.meta',
+            checkpoint=os.path.join(
+                auto_setup_dir,
+                'train_net_checkpoint_%d'%config['affs_iteration']),
+            graph='train_auto_net.meta',
             inputs={
                 affs_1_config['raw']: raw
             },
@@ -224,7 +229,7 @@ def train_until(max_iteration):
             dataset_dtypes={
                 labels: np.uint64
             },
-            every=1000,
+            every=100,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request) +
         PrintProfilingStats(every=10)
