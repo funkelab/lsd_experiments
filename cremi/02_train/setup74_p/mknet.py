@@ -91,6 +91,7 @@ def create_affs(input_shape, intermediate_shape, expected_output_shape, name):
     tf.train.export_meta_graph(filename=name + '.meta')
 
     config = {
+        'raw': raw.name,
         'pretrained_affs': pretrained_affs.name,
         'affs': affs.name,
         'gt_affs': gt_affs.name,
