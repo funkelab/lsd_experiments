@@ -7,33 +7,35 @@ def create_affs_network(input_shape, output_shape, name):
 
     tf.reset_default_graph()
 
-    raw = tf.placeholder(tf.float32, shape=input_shape)
-    raw_batched = tf.reshape(raw, (1, 1) + input_shape)
+    with tf.variable_scope('setup94_p'):
 
-    unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
+        raw = tf.placeholder(tf.float32, shape=input_shape)
+        raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    affs_batched, _ = mala.networks.conv_pass(
-        unet,
-        kernel_sizes=[1],
-        num_fmaps=3,
-        activation='sigmoid',
-        name='affs')
+        unet, _, _ = mala.networks.unet(raw_batched, 12, 5, [[1,3,3],[1,3,3],[3,3,3]])
 
-    affs_batched = crop_zyx(affs_batched, (1, 3) + output_shape)
-    affs = tf.reshape(affs_batched, (3,) + output_shape)
+        affs_batched, _ = mala.networks.conv_pass(
+            unet,
+            kernel_sizes=[1],
+            num_fmaps=3,
+            activation='sigmoid',
+            name='affs')
 
-    print("input shape : %s"%(input_shape,))
-    print("output shape: %s"%(output_shape,))
+        affs_batched = crop_zyx(affs_batched, (1, 3) + output_shape)
+        affs = tf.reshape(affs_batched, (3,) + output_shape)
 
-    tf.train.export_meta_graph(filename=name + '.meta')
+        print("input shape : %s"%(input_shape,))
+        print("output shape: %s"%(output_shape,))
 
-    config = {
-        'raw': raw.name,
-        'affs': affs.name,
-        'input_shape': input_shape,
-        'output_shape': output_shape}
-    with open(name + '.json', 'w') as f:
-        json.dump(config, f)
+        tf.train.export_meta_graph(filename=name + '.meta')
+
+        config = {
+            'raw': raw.name,
+            'affs': affs.name,
+            'input_shape': input_shape,
+            'output_shape': output_shape}
+        with open(name + '.json', 'w') as f:
+            json.dump(config, f)
 
 def create_affs2_network(input_shape, intermediate_shape, expected_output_shape, name):
 
