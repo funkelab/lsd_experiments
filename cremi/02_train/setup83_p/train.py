@@ -23,10 +23,20 @@ samples = [
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open('train_affs_net.json', 'r') as f:
+with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
+    config = json.load(f)
+
+with open('train_auto_net.json', 'r') as f:
     affs_1_config = json.load(f)
+
 with open('train_net.json', 'r') as f:
     affs_2_config = json.load(f)
+
+experiment_dir = os.path.join(setup_dir, '..', '..')
+auto_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    config['affs_setup']))
 
 phase_switch = 10000
 
@@ -38,8 +48,8 @@ def add_malis_loss(graph):
     gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
     gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
 
-    loss = malis.malis_loss_op(affs, 
-        gt_affs, 
+    loss = malis.malis_loss_op(affs,
+        gt_affs,
         gt_seg,
         neighborhood,
         gt_affs_mask)
@@ -70,7 +80,6 @@ def train_until(max_iteration):
     print("Training in phase %s until %i"%(phase, max_iteration))
 
     raw = ArrayKey('RAW')
-    raw_cropped = ArrayKey('RAW_CROPPED')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     artifacts = ArrayKey('ARTIFACTS')
@@ -87,10 +96,10 @@ def train_until(max_iteration):
     affs_2_input_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     pretrained_affs_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     output_size = Coordinate(affs_2_config['output_shape'])*voxel_size
+    context = output_size/2
 
     request = BatchRequest()
     request.add(raw, affs_1_input_size)
-    request.add(raw_cropped, affs_2_input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
     request.add(pretrained_affs, pretrained_affs_size)
@@ -109,21 +118,18 @@ def train_until(max_iteration):
             os.path.join(data_dir, sample + '.hdf'),
             datasets = {
                 raw: 'volumes/raw',
-                raw_cropped: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids_noglia',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
-                raw_cropped: ArraySpec(interpolatable=True),
                 labels: ArraySpec(interpolatable=False),
                 labels_mask: ArraySpec(interpolatable=False)
             }
         ) +
         Normalize(raw) +
-        Normalize(raw_cropped) +
-        Pad(raw, None) +
-        Pad(raw_cropped, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -168,14 +174,13 @@ def train_until(max_iteration):
             subsample=8)
     train_pipeline += SimpleAugment(transpose_only=[1, 2])
     train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
-    train_pipeline += IntensityAugment(raw_cropped, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
     train_pipeline += GrowBoundary(labels, labels_mask, steps=1, only_xy=True)
 
     if phase == 'malis':
         train_pipeline += RenumberConnectedComponents(
             labels=labels
             )
-    
+
     train_pipeline += AddAffinities(
         neighborhood,
         labels=labels,
@@ -200,26 +205,16 @@ def train_until(max_iteration):
             contrast_scale=0.5,
             axis=0)
 
-    train_pipeline += DefectAugment(
-            raw_cropped,
-            prob_missing=0.03, 
-            prob_low_contrast=0.01,
-            prob_artifact=0.03,
-            artifact_source=artifact_source,
-            artifacts=artifacts,
-            artifacts_mask=artifacts_mask,
-            contrast_scale=0.5, 
-            axis=0) 
-
     train_pipeline += IntensityScaleShift(raw, 2,-1)
-    train_pipeline += IntensityScaleShift(raw_cropped, 2,-1)
     train_pipeline += PreCache(
             cache_size=40,
             num_workers=10)
 
     train_pipeline += Predict(
-            checkpoint='../setup67_p/train_net_checkpoint_400000',
-            graph='train_affs_net.meta',
+            checkpoint=os.path.join(
+                auto_setup_dir,
+                'train_net_checkpoint_%d'%config['affs_iteration']),
+            graph='train_auto_net.meta',
             inputs={
                 affs_1_config['raw']: raw
             },
@@ -228,7 +223,7 @@ def train_until(max_iteration):
             })
 
     train_inputs = {
-            affs_2_config['raw']: raw_cropped,
+            affs_2_config['raw']: raw,
             affs_2_config['pretrained_affs']: pretrained_affs,
             affs_2_config['gt_affs']: gt
     }
@@ -258,12 +253,11 @@ def train_until(max_iteration):
             },
             summary=train_summary,
             log_dir='log',
-            save_every=10000) 
-    
-    train_pipeline += IntensityScaleShift(raw, 0.5, 0.5) 
-    train_pipeline += IntensityScaleShift(raw_cropped, 0.5, 0.5) 
+            save_every=10000)
+
+    train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
     train_pipeline += Snapshot({
-                raw_cropped: 'volumes/raw',
+                raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
@@ -275,7 +269,7 @@ def train_until(max_iteration):
             },
             every=1000,
             output_filename='batch_{iteration}.hdf',
-            additional_request=snapshot_request) 
+            additional_request=snapshot_request)
     train_pipeline += PrintProfilingStats(every=10)
 
     print("Starting training...")
