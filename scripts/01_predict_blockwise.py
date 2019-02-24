@@ -111,7 +111,6 @@ def predict_blockwise(
     print("net output size = %s"%(net_output_size,))
     print("context         = %s"%(context,))
 
-
     # create read and write ROI
     block_read_roi = daisy.Roi((0, 0, 0), net_input_size) - context
     block_write_roi = daisy.Roi((0, 0, 0), net_output_size)
@@ -194,7 +193,7 @@ def predict_worker(
         db_name):
 
     setup_dir = os.path.join('..', experiment, '02_train', setup)
-    predict_script = os.path.abspath(os.path.join(setup_dir, 'predict_newdaisy.py'))
+    predict_script = os.path.abspath(os.path.join(setup_dir, 'predict.py'))
 
     if raw_file.endswith('.json'):
         with open(raw_file, 'r') as f:
@@ -202,9 +201,9 @@ def predict_worker(
             raw_file = spec['container']
 
     worker_config = {
-        'queue': 'gpu_any',
+        'queue': 'gpu_tesla',
         'num_cpus': 2,
-        'num_cache_workers': 10,
+        'num_cache_workers': 5,
         'singularity': 'funkey/lsd:v0.8'
     }
 
