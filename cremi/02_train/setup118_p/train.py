@@ -16,11 +16,11 @@ data_dir = '../../01_data/glia_mask/'
 artifacts_dir = '../../01_data/training/'
 
 samples = [
-    'sample_0',
-    'sample_1',
-    'sample_2',
-    'sample_A',
-    'sample_B',
+   #  'sample_0',
+    # 'sample_1',
+    # 'sample_2',
+    # 'sample_A',
+    # 'sample_B',
     'sample_C'
 ]
 
@@ -69,6 +69,7 @@ def train_until(max_iteration):
     affs_2_input_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     pretrained_affs_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     output_size = Coordinate(affs_2_config['output_shape'])*voxel_size
+    context = output_size/2
 
     request = BatchRequest()
     request.add(raw, affs_1_input_size)
@@ -103,8 +104,8 @@ def train_until(max_iteration):
         ) +
         Normalize(raw) +
         Normalize(raw_cropped) +
-        Pad(raw, None) +
-        Pad(raw_cropped, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -189,7 +190,7 @@ def train_until(max_iteration):
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup94_p/train_net_checkpoint_400000',
+            checkpoint='../setup94_p/train_net_checkpoint_200000',
             graph='train_affs_net.meta',
             inputs={
                 affs_1_config['raw']: raw

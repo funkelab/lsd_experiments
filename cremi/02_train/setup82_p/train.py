@@ -27,7 +27,7 @@ with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
     config = json.load(f)
 
 experiment_dir = os.path.join(setup_dir, '..', '..')
-affs_setup_dir = os.path.realpath(os.path.join(
+auto_setup_dir = os.path.realpath(os.path.join(
     experiment_dir,
     '02_train',
     config['affs_setup']))
@@ -44,7 +44,6 @@ def train_until(max_iteration):
         return
 
     raw = ArrayKey('RAW')
-    raw_cropped = ArrayKey('RAW_CROPPED')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     artifacts = ArrayKey('ARTIFACTS')
@@ -56,7 +55,7 @@ def train_until(max_iteration):
     gt_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    with open('train_affs_net.json', 'r') as f:
+    with open('train_auto_net.json', 'r') as f:
         affs_1_config = json.load(f)
     with open('train_net.json', 'r') as f:
         affs_2_config = json.load(f)
@@ -66,10 +65,10 @@ def train_until(max_iteration):
     affs_2_input_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     pretrained_affs_size = Coordinate(affs_2_config['input_shape'])*voxel_size
     output_size = Coordinate(affs_2_config['output_shape'])*voxel_size
+    context = output_size/2
 
     request = BatchRequest()
     request.add(raw, affs_1_input_size)
-    request.add(raw_cropped, affs_2_input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
     request.add(pretrained_affs, pretrained_affs_size)
@@ -83,25 +82,22 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        Hdf5Source(
-            os.path.join(data_dir, sample + '.hdf'),
+        ZarrSource(
+            os.path.join(data_dir, sample + '.n5'),
             datasets = {
                 raw: 'volumes/raw',
-                raw_cropped: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids_noglia',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
-                raw_cropped: ArraySpec(interpolatable=True),
                 labels: ArraySpec(interpolatable=False),
                 labels_mask: ArraySpec(interpolatable=False)
             }
         ) +
         Normalize(raw) +
-        Normalize(raw_cropped) +
-        Pad(raw, None) +
-        Pad(raw_cropped, None) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
@@ -148,7 +144,6 @@ def train_until(max_iteration):
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
-        IntensityAugment(raw_cropped, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
         GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
             neighborhood,
@@ -170,24 +165,15 @@ def train_until(max_iteration):
             artifacts_mask=artifacts_mask,
             contrast_scale=0.5,
             axis=0) +
-        DefectAugment(
-            raw_cropped,
-            prob_missing=0.03,
-            prob_low_contrast=0.01,
-            prob_artifact=0.03,
-            artifact_source=artifact_source,
-            artifacts=artifacts,
-            artifacts_mask=artifacts_mask,
-            contrast_scale=0.5,
-            axis=0) +
         IntensityScaleShift(raw, 2,-1) +
-        IntensityScaleShift(raw_cropped, 2,-1) +
         PreCache(
             cache_size=40,
             num_workers=10) +
         Predict(
-            checkpoint='../setup66_p/train_net_checkpoint_400000',
-            graph='train_affs_net.meta',
+            checkpoint=os.path.join(
+                auto_setup_dir,
+                'train_net_checkpoint_%d'%config['affs_iteration']),
+            graph='train_auto_net.meta',
             inputs={
                 affs_1_config['raw']: raw
             },
@@ -199,7 +185,7 @@ def train_until(max_iteration):
             optimizer=affs_2_config['optimizer'],
             loss=affs_2_config['loss'],
             inputs={
-                affs_2_config['raw']: raw_cropped,
+                affs_2_config['raw']: raw,
                 affs_2_config['pretrained_affs']: pretrained_affs,
                 affs_2_config['gt_affs']: gt,
                 affs_2_config['affs_loss_weights']: gt_scale,
@@ -214,9 +200,8 @@ def train_until(max_iteration):
             log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
-        IntensityScaleShift(raw_cropped, 0.5, 0.5) +
         Snapshot({
-                raw_cropped: 'volumes/raw',
+                raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
                 gt: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
