@@ -23,6 +23,47 @@ def find_segments(
         roi_shape,
         **kwargs):
 
+    '''
+
+    Args:
+
+        db_host (``string``):
+
+            Where to find the MongoDB server.
+
+        db_name (``string``):
+
+            The name of the MongoDB database to use.
+
+        fragments_file (``string``):
+
+            Path to the file containing the fragments.
+
+        edges_collection (``string``):
+
+            The name of the MongoDB database collection to use.
+
+        thresholds_minmax (``list`` of ``int``):
+
+            The lower and upper bound to use (i.e [0,1]) when generating
+            thresholds.
+
+        thresholds_step (``float``):
+
+            The step size to use when generating thresholds between min/max.
+
+        roi_offset (array-like of ``int``):
+
+            The starting point (inclusive) of the ROI. Entries can be ``None``
+            to indicate unboundedness.
+
+        roi_shape (array-like of ``int``):
+
+            The shape of the ROI. Entries can be ``None`` to indicate
+            unboundedness.
+
+    '''
+
     print("Reading graph from DB ", db_name, edges_collection)
     start = time.time()
 
@@ -75,22 +116,6 @@ def find_segments(
         thresholds_minmax[0],
         thresholds_minmax[1],
         thresholds_step))
-
-
-    # pool = mp.Pool(processes=60)
-    # for threshold in thresholds:
-        # pool.apply_async(
-                # create_lut,
-                # args=(
-                    # edges_collection,
-                    # out_dir,
-                    # nodes,
-                    # edges,
-                    # scores,
-                    # threshold)
-                # )
-    # pool.close()
-    # pool.join()
 
     procs = []
     start = time.time()
