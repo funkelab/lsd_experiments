@@ -7,10 +7,10 @@ import daisy
 import sys
 import time
 import pymongo
+import psutil
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
-# logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
+logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 
 def agglomerate(
         experiment,
@@ -97,16 +97,16 @@ def agglomerate(
     write_roi = daisy.Roi((0,)*affs.roi.dims(), block_size)
 
     daisy.run_blockwise(
-            total_roi,
-            read_roi,
-            write_roi,
-            process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
-            check_function=lambda b: check_block(
-                blocks_agglomerated,
-                b),
-            num_workers=num_workers,
-            read_write_conflict=False,
-            fit='shrink')
+        total_roi,
+        read_roi,
+        write_roi,
+        process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
+        check_function=lambda b: check_block(
+            blocks_agglomerated,
+            b),
+        num_workers=num_workers,
+        read_write_conflict=False,
+        fit='shrink')
 
 def start_worker(config_file, network_dir, queue):
 
@@ -124,7 +124,7 @@ def start_worker(config_file, network_dir, queue):
 
     daisy.call([
         'run_lsf',
-        '-c', '1',
+        '-c', '8',
         '-g', '0',
         '-q', queue,
         '-b',
@@ -136,11 +136,11 @@ def start_worker(config_file, network_dir, queue):
 
 def check_block(blocks_agglomerated, block):
 
-    print("Checking if block %s is complete..."%block.write_roi)
+    # print("Checking if block %s is complete..."%block.write_roi)
 
     done = blocks_agglomerated.count({'block_id': block.block_id}) >= 1
 
-    print("Block %s is %s" % (block, "done" if done else "NOT done"))
+    # print("Block %s is %s" % (block, "done" if done else "NOT done"))
 
     return done
 
@@ -180,11 +180,13 @@ def agglomerate_worker(
 
     # open RAG DB
     logging.info("Opening RAG DB...")
-    rag_provider = lsd.persistence.MongoDbRagProvider(
+    rag_provider = daisy.persistence.MongoDbGraphProvider(
         db_name,
         host=db_host,
         mode='r+',
-        edges_collection='edges_' + merge_function)
+        directed=False,
+        edges_collection='edges_' + merge_function,
+        position_attribute=['center_z, center_y, center_x'])
     logging.info("RAG DB opened")
 
     # open block done DB
@@ -198,9 +200,15 @@ def agglomerate_worker(
 
     client = daisy.Client()
 
+    num_blocks = 0
+
+    process = psutil.Process(os.getpid())
+
     while True:
 
         block = client.acquire_block()
+
+        num_blocks += 1
 
         if not block:
             return
@@ -215,15 +223,17 @@ def agglomerate_worker(
                 merge_function=waterz_merge_function,
                 threshold=1.0)
 
+        logging.info("Process %d blocks consume current memory usage %d", num_blocks, process.memory_info().rss)
+
         document = {
-                'num_cpus': 5,
-                'queue': queue,
-                'block_id': block.block_id,
-                'read_roi': (block.read_roi.get_begin(), block.read_roi.get_shape()),
-                'write_roi': (block.write_roi.get_begin(), block.write_roi.get_shape()),
-                'start': start,
-                'duration': time.time() - start
-                }
+            'num_cpus': 5,
+            'queue': queue,
+            'block_id': block.block_id,
+            'read_roi': (block.read_roi.get_begin(), block.read_roi.get_shape()),
+            'write_roi': (block.write_roi.get_begin(), block.write_roi.get_shape()),
+            'start': start,
+            'duration': time.time() - start
+        }
         blocks_agglomerated.insert(document)
 
         client.release_block(block, 0)

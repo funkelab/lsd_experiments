@@ -7,10 +7,10 @@ import daisy
 import sys
 import time
 import pymongo
+import psutil
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
-# logging.getLogger('lsd.persistence.sqlite_rag_provider').setLevel(logging.DEBUG)
 
 def extract_fragments(
         experiment,
@@ -121,7 +121,7 @@ def start_worker(config_file, network_dir, queue):
 
     daisy.call([
         'run_lsf',
-        '-c', '1',
+        '-c', '8',
         '-g', '0',
         '-q', queue,
         '-b',
@@ -190,10 +190,13 @@ def extract_fragments_worker(
 
     # open RAG DB
     logging.info("Opening RAG DB...")
-    rag_provider = lsd.persistence.MongoDbRagProvider(
+    rag_provider = daisy.persistence.MongoDbGraphProvider(
         db_name,
         host=db_host,
-        mode='r+')
+        mode='r+',
+        directed=False,
+        position_attribute=['center_z, center_y, center_x']
+        )
     logging.info("RAG DB opened")
 
     # open block done DB
@@ -203,9 +206,15 @@ def extract_fragments_worker(
 
     client = daisy.Client()
 
+    num_blocks = 0
+
+    process = psutil.Process(os.getpid())
+
     while True:
 
         block = client.acquire_block()
+
+        num_blocks += 1
 
         if not block:
             return
@@ -220,6 +229,8 @@ def extract_fragments_worker(
             fragments_in_xy,
             epsilon_agglomerate=epsilon_agglomerate,
             mask=mask)
+
+        logging.info("Process %d blocks consume current memory usage %d", num_blocks, process.memory_info().rss)
 
         document = {
             'num_cpus': 5,
