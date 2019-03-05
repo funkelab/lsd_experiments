@@ -234,7 +234,8 @@ def evaluate(
         nodes_collection=annotations_skeletons_collection_name + '.nodes',
         edges_collection=annotations_skeletons_collection_name + '.edges',
         endpoint_names=['source', 'target'],
-        position_attribute=['z', 'y', 'x'])
+        position_attribute=['z', 'y', 'x'],
+        node_attribute_collections={'calyx_neuropil_mask': ['masked']})
 
     print("Fetching all skeletons...")
     start = time.time()
@@ -245,9 +246,9 @@ def evaluate(
     # remove outside edges and nodes
     remove_nodes = []
     for node, data in skeletons.nodes(data=True):
-        if 'z' not in data:
+        if 'z' not in data or not data['masked']:
             remove_nodes.append(node)
-    print("Removing %d nodes that were outside of ROI"%len(remove_nodes))
+    print("Removing %d nodes that were outside of ROI or masked"%len(remove_nodes))
     for node in remove_nodes:
         skeletons.remove_node(node)
 
