@@ -17,51 +17,6 @@ import glob
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def read_synaptic_sites(
-        db_host,
-        skeleton_db_name,
-        synapse_nodes_collection,
-        roi):
-    '''Get a dict from synaptic site ID to a dict with 'location' and
-    'neuron_id' for each synapse annotation in the given ROI.'''
-
-    print("Reading synaptic sites...")
-    start = time.time()
-
-    client = MongoClient(db_host)
-    database = client[skeleton_db_name]
-    collection = database[synapse_nodes_collection]
-
-    bz, by, bx = roi.get_begin()
-    ez, ey, ex = roi.get_end()
-
-    synaptic_sites = collection.find(
-        {
-            'z': { '$gte': bz, '$lt': ez },
-            'y': { '$gte': by, '$lt': ey },
-            'x': { '$gte': bx, '$lt': ex },
-            'type': { '$in': [ 'syncenter', 'post_neuron' ] }
-        })
-
-    # synaptic site IDs are not unique, renumber them here
-    synaptic_sites = [
-        {
-            'id': i + 1,
-            'z': s['z'],
-            'y': s['y'],
-            'x': s['x'],
-            'neuron_id': s['neuron_id'],
-            'type': 'pre' if s['type'] == 'syncenter' else 'post'
-        }
-        for i, s in enumerate(synaptic_sites)
-    ]
-
-    print("%d synaptic sites found in %.3fs"%(
-        len(synaptic_sites),
-        time.time() - start))
-
-    return synaptic_sites
-
 def get_site_fragment_lut(fragments, synaptic_sites, roi):
     '''Get the fragment IDs of all the synaptic sites that are contained in the
     given ROI.'''
@@ -129,7 +84,7 @@ def store_lut_in_block(
             'x': { '$gte': bx, '$lt': ex }
         })
 
-    # get synaptic site -> fragment ID
+    # get site -> fragment ID
     site_fragment_lut = get_site_fragment_lut(
         fragments,
         site_nodes,
@@ -150,7 +105,6 @@ def prepare_evaluate(
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name,
-        annotations_synapses_collection_name,
         **kwargs):
 
     # open fragments
@@ -206,8 +160,7 @@ def evaluate(
         fragments_dataset,
         annotations_db_host,
         annotations_db_name,
-        annotations_skeletons_collection_name,
-        annotations_synapses_collection_name)
+        annotations_skeletons_collection_name)
 
 
     roi = daisy.Roi(roi_offset, roi_shape)
@@ -233,7 +186,7 @@ def evaluate(
     for node, data in skeletons.nodes(data=True):
         if 'z' not in data or not data['masked']:
             remove_nodes.append(node)
-    print("Removing %d nodes that were outside of ROI or masked"%len(remove_nodes))
+    print("Removing %d nodes that were outside of ROI or not masked"%len(remove_nodes))
     for node in remove_nodes:
         skeletons.remove_node(node)
 
@@ -246,7 +199,7 @@ def evaluate(
         return_lut=False)
     print("%.3fs"%(time.time() - start))
 
-    # get all synaptic sites with their fragment ID
+    # get all sites with their fragment ID
     print("Fetching site-fragment LUT...")
     start = time.time()
     lut_files = glob.glob(
@@ -259,10 +212,10 @@ def evaluate(
             for f in lut_files
         ],
         axis=1)
-    print("Found %d synaptic sites in site-fragment LUT" % len(site_fragment_lut[0]))
+    print("Found %d sites in site-fragment LUT" % len(site_fragment_lut[0]))
     print("%.3fs"%(time.time() - start))
 
-    # limit to relevant sites within requested ROI
+    # limit to relevant sites within requested ROI and mask
     relevant_mask = np.array([
         skeletons.has_node(site)
         for site in site_fragment_lut[0]
@@ -278,6 +231,18 @@ def evaluate(
         skeletons.nodes[site]['component_id']
         for site in site_fragment_lut[0]
     ])
+
+    # create a mask (for the site-fragment-LUT) that limits it to synaptic sites
+    client = MongoClient(annotations_db_host)
+    database = client[annotations_db_name]
+    synapses_collection = database[annotations_synapses_collection_name + '.edges']
+    synaptic_sites = synapses_collection.find()
+    synaptic_sites = np.unique([
+        s
+        for ss in synaptic_sites
+        for s in [ss['source'], ss['target']]
+    ])
+    synaptic_sites_mask = np.isin(site_fragment_lut[0], synaptic_sites)
 
     scores_config = {
             'experiment': experiment,
@@ -302,6 +267,7 @@ def evaluate(
                     fragments_file,
                     edges_collection,
                     site_fragment_lut,
+                    synaptic_sites_mask,
                     component_ids,
                     threshold,
                     scores_config,
@@ -318,6 +284,7 @@ def evaluate_parallel(
         fragments_file,
         edges_collection,
         site_fragment_lut,
+        synaptic_sites_mask,
         component_ids,
         threshold,
         scores_config,
@@ -366,6 +333,12 @@ def evaluate_parallel(
         updated_report = report.copy()
         for k in remove_keys:
             updated_report.pop(k, None)
+
+        synapse_report = rand_voi(
+            np.array([[component_ids[synaptic_sites_mask]]]),
+            np.array([[segment_ids[synaptic_sites_mask]]]))
+        updated_report['synapse_voi_split'] = synapse_report['voi_split']
+        updated_report['synapse_voi_merge'] = synapse_report['voi_merge']
 
         updated_report.update({'threshold': threshold})
         updated_report.update(scores_config)
