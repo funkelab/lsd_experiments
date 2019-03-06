@@ -35,7 +35,7 @@ if __name__ == "__main__":
     for node, data in graph.nodes(data=True):
 
         pos = daisy.Coordinate((data[d] for d in ['z', 'y', 'x']))
-        data['masked'] = mask[pos]
+        data['masked'] = bool(mask[pos])
 
         if i%1000 == 0:
             print("Masked %d/%d" % (i, graph.number_of_nodes()))
