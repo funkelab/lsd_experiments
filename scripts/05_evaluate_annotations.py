@@ -109,12 +109,11 @@ def store_lut_in_block(
         annotations_skeletons_collection_name,
         site_fragment_lut_directory,
         fragments,
-        sites,
         block):
 
     print("Finding fragment IDs in block %s"%block)
 
-    # get synaptic sites
+    # get all skeleton nodes (which include synaptic sites)
     client = MongoClient(annotations_db_host)
     database = client[annotations_db_name]
     skeletons_collection = \
@@ -127,8 +126,7 @@ def store_lut_in_block(
         {
             'z': { '$gte': bz, '$lt': ez },
             'y': { '$gte': by, '$lt': ey },
-            'x': { '$gte': bx, '$lt': ex },
-            'id': { '$in': sites }
+            'x': { '$gte': bx, '$lt': ex }
         })
 
     # get synaptic site -> fragment ID
@@ -159,18 +157,6 @@ def prepare_evaluate(
     fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r')
     roi = fragments.roi
 
-    # 1. find all synaptic sites
-    client = MongoClient(annotations_db_host)
-    database = client[annotations_db_name]
-    synapses = database[annotations_synapses_collection_name + '.edges']
-
-    sites = synapses.find()
-    sites = list(set(
-        s
-        for ss in sites
-        for s in [ss['source'], ss['target']]
-    ))
-
     site_fragment_lut_directory = os.path.join(
         fragments_file,
         'luts/site_fragment')
@@ -191,7 +177,6 @@ def prepare_evaluate(
             annotations_skeletons_collection_name,
             site_fragment_lut_directory,
             fragments,
-            sites,
             b),
         num_workers=40,
         fit='shrink')
