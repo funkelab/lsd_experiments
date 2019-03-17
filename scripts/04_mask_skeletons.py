@@ -48,24 +48,24 @@ if __name__ == "__main__":
 
     # remove outside edges and nodes
     remove_nodes = []
-    filtered_skeletons = skeletons.copy()
-    for node, data in filtered_skeletons.nodes(data=True):
+    filtered_graph = graph.copy()
+    for node, data in filtered_graph.nodes(data=True):
         if 'z' not in data or not data['masked']:
             remove_nodes.append(node)
     print("Removing %d nodes that were outside of ROI or not masked"%len(remove_nodes))
     for node in remove_nodes:
-        filtered_skeletons.remove_node(node)
+        filtered_graph.remove_node(node)
 
     # relabel connected components
     print("Relabeling skeleton components...")
     start = time.time()
     node_to_comp = find_connected_components(
-        filtered_skeletons,
+        filtered_graph,
         'component_id',
         return_lut=True)
     print("%.3fs"%(time.time() - start))
 
-    for node, data in skeletons.nodes(data=True):
+    for node, data in graph.nodes(data=True):
         if node in node_to_comp:
             data['component_id'] = int(node_to_comp[node])
         else:
