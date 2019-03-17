@@ -1,15 +1,13 @@
-from funlib.segment.graphs import find_connected_components
 from funlib.segment.arrays import replace_values
 from funlib.evaluate import rand_voi
 from funlib.evaluate import expected_run_length, get_skeleton_lengths
 from pymongo import MongoClient
-# from scipy.special import comb
+from 04_mask_skeletons import roi as calyx_mask_roi
 import daisy
 import json
 import logging
 import numpy as np
 import multiprocessing as mp
-# import sklearn.metrics
 import sys
 import time
 import os
@@ -136,6 +134,53 @@ def prepare_evaluate(
         num_workers=10,
         fit='shrink')
 
+def read_skeletons(
+        annotations_db_name,
+        annotations_db_host,
+        annotations_skeletons_collection_name,
+        roi):
+
+    if roi != calyx_mask_roi:
+        logger.warn(
+            "Requested ROI %s differs from ROI %s, for which component "
+            "IDs have been generated. I hope you know what you are doing!",
+            roi, calyx_mask_roi)
+
+    # get all skeletons that are masked in
+    print("Fetching all skeletons...")
+    skeletons_provider = daisy.persistence.MongoDbGraphProvider(
+        annotations_db_name,
+        annotations_db_host,
+        nodes_collection=annotations_skeletons_collection_name + '.nodes',
+        edges_collection=annotations_skeletons_collection_name + '.edges',
+        endpoint_names=['source', 'target'],
+        position_attribute=['z', 'y', 'x'],
+        node_attribute_collections={
+            'calyx_neuropil_mask': ['masked'],
+            'calyx_neuropil_components': ['component_id'],
+        })
+
+    start = time.time()
+    skeletons = skeletons_provider.get_graph(
+        roi,
+        nodes_filter={'masked': True})
+    print("Found %d skeleton nodes" % skeletons.number_of_nodes())
+    print("%.3fs"%(time.time() - start))
+
+    # remove outside edges and nodes
+    remove_nodes = []
+    for node, data in skeletons.nodes(data=True):
+        if 'z' not in data:
+            remove_nodes.append(node)
+        else:
+            assert data['masked'] == True
+            assert data['component_id'] >= 0
+    print("Removing %d nodes that were outside of ROI"%len(remove_nodes))
+    for node in remove_nodes:
+        skeletons.remove_node(node)
+
+    return skeletons
+
 def evaluate(
         experiment,
         setup,
@@ -156,38 +201,28 @@ def evaluate(
         thresholds_step,
         **kwargs):
 
+    print("Preparing site-fragment LUT...")
+    start = time.time()
     prepare_evaluate(
         fragments_file,
         fragments_dataset,
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name)
-
+    print("%.3fs"%(time.time() - start))
 
     roi = daisy.Roi(roi_offset, roi_shape)
 
-    # get all skeletons
-    print("Fetching all skeletons...")
-    skeletons_provider = daisy.persistence.MongoDbGraphProvider(
+    print("Reading skeletons...")
+    start = time.time()
+    skeletons = read_skeletons(
         annotations_db_name,
         annotations_db_host,
-        nodes_collection=annotations_skeletons_collection_name + '.nodes',
-        edges_collection=annotations_skeletons_collection_name + '.edges',
-        endpoint_names=['source', 'target'],
-        position_attribute=['z', 'y', 'x'],
-        node_attribute_collections={'calyx_neuropil_mask': ['masked']})
-
-    start = time.time()
-    skeletons = skeletons_provider[roi]
-    print("Found %d skeleton nodes" % skeletons.number_of_nodes())
+        annotations_skeletons_collection_name,
+        roi)
     print("%.3fs"%(time.time() - start))
 
-
-
-
-
-    # get all sites with their fragment ID
-    print("Fetching site-fragment LUT...")
+    print("Reading site-fragment LUT...")
     start = time.time()
     lut_files = glob.glob(
         os.path.join(
@@ -208,22 +243,20 @@ def evaluate(
         for site in site_fragment_lut[0]
     ])
     site_fragment_lut = site_fragment_lut[:,relevant_mask]
-    print("Limited to %d synaptic sites within ROI"%len(site_fragment_lut[0]))
+    print("Limited site-fragment LUT to %d relevant sites within ROI"%len(site_fragment_lut[0]))
     if len(site_fragment_lut[0]) < 100:
         print("Found sites: ", site_fragment_lut[0])
 
-    # array with skeleton component ID for each site
-    # (does not change between thresholds)
+    # array with component ID for each site (does not change between
+    # thresholds)
     component_ids = np.array([
         skeletons.nodes[site]['component_id']
         for site in site_fragment_lut[0]
     ])
-    comp_to_skel = {
-        skeletons.nodes[site]['component_id']: skeletons.nodes[site]['neuron_id']
-        for site in site_fragment_lut[0]
-    ])
 
     # create a mask (for the site-fragment-LUT) that limits it to synaptic sites
+    print("Creating synaptic sites mask...")
+    start = time.time()
     client = MongoClient(annotations_db_host)
     database = client[annotations_db_name]
     synapses_collection = database[annotations_synapses_collection_name + '.edges']
@@ -234,12 +267,16 @@ def evaluate(
         for s in [ss['source'], ss['target']]
     ])
     synaptic_sites_mask = np.isin(site_fragment_lut[0], synaptic_sites)
+    print("%.3fs"%(time.time() - start))
 
+    print("Calcluating skeleton lengths...")
+    start = time.time()
     skeleton_lengths = get_skeleton_lengths(
             skeletons,
             skeleton_position_attributes=['z', 'y', 'x'],
             skeleton_id_attribute='component_id',
             store_edge_length='length')
+    print("%.3fs"%(time.time() - start))
 
     scores_config = {
             'experiment': experiment,
@@ -256,6 +293,7 @@ def evaluate(
 
     procs = []
 
+    print("Evaluating thresholds...")
     start = time.time()
     for threshold in thresholds:
         proc = mp.Process(
@@ -266,7 +304,6 @@ def evaluate(
                     site_fragment_lut,
                     synaptic_sites_mask,
                     component_ids,
-                    comp_to_skel,
                     skeletons,
                     skeleton_lengths,
                     threshold,
@@ -279,6 +316,7 @@ def evaluate(
 
     for proc in procs:
         proc.join()
+    print("%.3fs"%(time.time() - start))
 
 def evaluate_parallel(
         fragments_file,
@@ -286,7 +324,6 @@ def evaluate_parallel(
         site_fragment_lut,
         synaptic_sites_mask,
         component_ids,
-        comp_to_skel,
         skeletons,
         skeleton_lengths,
         threshold,
@@ -297,7 +334,6 @@ def evaluate_parallel(
         scores_client = MongoClient(scores_db_host)
         scores_db = scores_client[scores_db_name]
         scores_collection = scores_db['scores']
-
 
         # get fragment-segment LUT
         print("Reading fragment-segment LUT...")
@@ -320,12 +356,14 @@ def evaluate_parallel(
             fragment_segment_lut[1])
         print("%.3fs"%(time.time() - start))
 
+        number_of_segments = np.unique(segment_ids).size()
+
         num_not_changed = (segment_ids == site_fragment_lut[1]).sum()
         print("%d site segments have same ID as fragment"%num_not_changed)
 
         node_segment_lut = {
-                site: segment for site, segment in zip(site_fragment_lut[0], segment_ids)
-                }
+            site: segment for site, segment in zip(site_fragment_lut[0], segment_ids)
+        }
 
         print("Calculating expected run length...")
         start = time.time()
@@ -338,14 +376,14 @@ def evaluate_parallel(
                 return_merge_split_stats=True)
         print("%.3fs"%(time.time() - start))
 
-        # compute RAND index
-
-        print("%d synaptic sites associated with segments"%segment_ids.size)
-
+        print("Computing RAND and VOI on skeletons and synaptic sites...")
+        start = time.time()
         report = rand_voi(
             np.array([[component_ids]]),
             np.array([[segment_ids]]),
             return_cluster_scores=True)
+        print("VOI split: ", report['voi_split'])
+        print("VOI merge: ", report['voi_merge'])
 
         remove_keys = {'voi_split_i', 'voi_merge_j'}
         updated_report = report.copy()
@@ -355,59 +393,59 @@ def evaluate_parallel(
         synapse_report = rand_voi(
             np.array([[component_ids[synaptic_sites_mask]]]),
             np.array([[segment_ids[synaptic_sites_mask]]]))
+        print("%.3fs"%(time.time() - start))
 
-        # stats = convert_keys_to_string(stats)
-
-        # TODO: continue here
         stats['merge_stats'] = {
-            int(seg_id): [int(comp_to_skel[comp_id]) for comp_id in comp_ids] 
+            int(seg_id): [int(comp_id) for comp_id in comp_ids]
             for seg_id, comp_ids in stats['merge_stats'].items()
         }
         stats['split_stats'] = {
-            int(comp_to_skel[comp_id]): [(int(a), int(b)) for a, b in seg_ids]
+            int(comp_id): [(int(a), int(b)) for a, b in seg_ids]
             for comp_id, seg_ids in stats['split_stats'].items()
         }
 
-        number_of_merging_segments = len(stats['merge_stats'].keys())
-        number_of_split_skeletons = len(stats['split_stats'].keys())
+        number_of_merging_segments = len(stats['merge_stats'])
+        number_of_split_skeletons = len(stats['split_stats'])
 
-        merges = []
-
+        # TODO: this should be replaced with a min-cut iterative proof-reading
+        # simulation
+        splits_needed = 0
         for k, v in stats['merge_stats'].items():
-            merges.append(len(v) - 1)
+            splits_needed += (len(v) - 1)
+        print('Splits needed to fix merges: ', splits_needed, type(splits_needed))
 
-        merge_splits = sum(merges)
-        print('Merge splits: ', merge_splits, type(merge_splits))
+        average_splits_needed = splits_needed/number_of_segments
+        print(
+            'Average splits needed per segment: ',
+            average_splits_needed,
+            type(average_splits_needed))
 
-        merge_average = merge_splits / number_of_segments
-        print('Merge average: ', merge_average, type(merge_average))
+        merges_needed = 0
+        for split_list in stats['split_stats'].values()
+            merges_needed += len(split_list)
+        average_merges_needed = merges_needed/number_of_skeletons
 
-        splits = [item for sublist in stats['split_stats'].values() for l in sublist for item in l]
-        splits_average = len(splits) / number_of_skeletons
-
-        print('Splits: ', len(splits), type(len(splits)))
-        print('Splits average: ', splits_average, type(splits_average))
+        print('Merges needed to fix splits: ', len(merges_needed), type(len(merges_needed)))
+        print(
+            'Average merges needed per skeleton: ',
+            average_merges_needed,
+            type(average_merges_needed))
 
         updated_report['synapse_voi_split'] = synapse_report['voi_split']
         updated_report['synapse_voi_merge'] = synapse_report['voi_merge']
         updated_report['expected_run_length'] = erl
+        updated_report['number_of_segments'] = number_of_segments
         updated_report['number_of_merging_segments'] = number_of_merging_segments
-        updated_report['total_splits_needed_to_fix_merges'] = merge_splits
-        updated_report['average_splits_needed_to_fix_merges'] = merge_average
         updated_report['number_of_split_skeletons'] = number_of_split_skeletons
-        updated_report['total_number_of_splits'] = len(splits)
-        updated_report['average_number_of_splits'] = splits_average
-        
-
-        # print(updated_report)
-
+        updated_report['total_splits_needed_to_fix_merges'] = splits_needed
+        updated_report['average_splits_needed_to_fix_merges'] = average_splits_needed
+        updated_report['total_merges_needed_to_fix_splits'] = merges_needed
+        updated_report['average_merges_needed_to_fix_splits'] = average_merges_needed
+        updated_report['merge_stats'] = stats['merge_stats']
+        updated_report['split_stats'] = stats['split_stats']
         updated_report.update({'threshold': threshold})
         updated_report.update(scores_config)
         scores_collection.insert(updated_report)
-
-        print("Calculating scores for threshold: ", threshold)
-        print("VOI split: ", report['voi_split'])
-        print("VOI merge: ", report['voi_merge'])
 
         # get most severe splits/merges
         splits = sorted([(s, i) for (i, s) in report['voi_split_i'].items()])
@@ -420,17 +458,6 @@ def evaluate_parallel(
         print("10 worst merges:")
         for (s, i) in merges[-10:]:
             print("\tsegment %d\tVOI merge %.5f" % (i, s))
-
-def convert_keys_to_string(d):
-
-    new_dict = {}
-
-    for k, v in d.items():
-        if isinstance(v, dict):
-            v = convert_keys_to_string(v)
-        new_dict[str(k)] = v
-
-    return new_dict
 
 if __name__ == "__main__":
 
