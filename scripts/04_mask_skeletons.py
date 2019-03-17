@@ -1,5 +1,7 @@
-import daisy
 from funlib.segment.graphs import find_connected_components
+import daisy
+import networkx
+import time
 
 mask_filename = '/groups/futusa/futusa/projects/fafb/calyx_neuropil_mask/calyx.zarr'
 mask_ds = 'volumes/neuropil_mask'
@@ -48,7 +50,7 @@ if __name__ == "__main__":
 
     # remove outside edges and nodes
     remove_nodes = []
-    filtered_graph = graph.copy()
+    filtered_graph = networkx.Graph(data=graph)
     for node, data in filtered_graph.nodes(data=True):
         if 'z' not in data or not data['masked']:
             remove_nodes.append(node)
