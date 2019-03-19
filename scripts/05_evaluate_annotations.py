@@ -235,6 +235,7 @@ def evaluate(
             for f in lut_files
         ],
         axis=1)
+    assert site_fragment_lut.dtype == np.uint64
     print("Found %d sites in site-fragment LUT" % len(site_fragment_lut[0]))
     print("%.3fs"%(time.time() - start))
 
@@ -254,6 +255,8 @@ def evaluate(
         skeletons.nodes[site]['component_id']
         for site in site_fragment_lut[0]
     ])
+    assert component_ids.min() >= 0
+    component_ids = component_ids.astype(np.uint64)
 
     # create a mask (for the site-fragment-LUT) that limits it to synaptic sites
     print("Creating synaptic sites mask...")
@@ -347,6 +350,7 @@ def evaluate_parallel(
             'seg_%s_%d.npz'%(edges_collection,int(threshold*100)))
         fragment_segment_lut = np.load(
             fragment_segment_lut_file)['fragment_segment_lut']
+        assert fragment_segment_lut.dtype == np.uint64
         print("%.3fs"%(time.time() - start))
 
         # get the segment ID for each site
@@ -370,8 +374,6 @@ def evaluate_parallel(
         print("Calculating expected run length...")
         start = time.time()
 
-        ######## Something goes wrong when calculating erl, all entries are zero
-
         erl, stats = expected_run_length(
                 skeletons=skeletons,
                 skeleton_id_attribute='component_id',
@@ -385,8 +387,7 @@ def evaluate_parallel(
 
         ######## If we comment the below two lines out, we get the cython buffer dtype mismatch error when calculating rand_voi
 
-        component_ids = component_ids.astype(np.uint64)
-        segment_ids = segment_ids.astype(np.uint64)
+        # segment_ids = segment_ids.astype(np.uint64)
 
         ######################################################
 
@@ -409,17 +410,23 @@ def evaluate_parallel(
             np.array([[segment_ids[synaptic_sites_mask]]]))
         print("%.3fs"%(time.time() - start))
 
-        stats['merge_stats'] = {
-            int(seg_id): [int(comp_id) for comp_id in comp_ids]
+        merge_stats = [
+            { 
+                'seg_id': int(seg_id),
+                'comp_ids': [int(comp_id) for comp_id in comp_ids]
+            }
             for seg_id, comp_ids in stats['merge_stats'].items()
-        }
-        stats['split_stats'] = {
-            int(comp_id): [(int(a), int(b)) for a, b in seg_ids]
+        ]
+        split_stats = [
+            {
+                'comp_id': int(comp_id),
+                'seg_ids': [(int(a), int(b)) for a, b in seg_ids]
+            }
             for comp_id, seg_ids in stats['split_stats'].items()
-        }
+        ]
 
-        number_of_merging_segments = len(stats['merge_stats'])
-        number_of_split_skeletons = len(stats['split_stats'])
+        number_of_merging_segments = len(merge_stats)
+        number_of_split_skeletons = len(split_stats)
 
         # TODO: this should be replaced with a min-cut iterative proof-reading
         # simulation
@@ -445,12 +452,6 @@ def evaluate_parallel(
             average_merges_needed,
             type(average_merges_needed))
 
-        ######## If we comment the below line out, we receive the error that keys need to be strings
-
-        stats = convert_keys_to_string(stats)
-
-        ##########################################################
-
         updated_report['synapse_voi_split'] = synapse_report['voi_split']
         updated_report['synapse_voi_merge'] = synapse_report['voi_merge']
         updated_report['expected_run_length'] = erl
@@ -461,15 +462,9 @@ def evaluate_parallel(
         updated_report['average_splits_needed_to_fix_merges'] = average_splits_needed
         updated_report['total_merges_needed_to_fix_splits'] = merges_needed
         updated_report['average_merges_needed_to_fix_splits'] = average_merges_needed
-
-        ######## If we add the below two lines to the updated report we receive BSON invalid doc error
-
-        # updated_report['merge_stats'] = stats['merge_stats']
-        # updated_report['split_stats'] = stats['split_stats']
-
-        ##########################################################
-
-        updated_report.update({'threshold': threshold})
+        updated_report['merge_stats'] = merge_stats
+        updated_report['split_stats'] = split_stats
+        updated_report['threshold'] = threshold
         updated_report.update(scores_config)
 
         ######## We should ensure unique doc entries with network_configuration, merge_function, threshold
@@ -489,17 +484,6 @@ def evaluate_parallel(
         print("10 worst merges:")
         for (s, i) in merges[-10:]:
             print("\tsegment %d\tVOI merge %.5f" % (i, s))
-
-def convert_keys_to_string(d):
-
-    new_dict = {}
-
-    for k, v in d.items():
-        if isinstance(v, dict):
-            v = convert_keys_to_string(v)
-        new_dict[str(k)] = v
-
-    return new_dict
 
 if __name__ == "__main__":
 
