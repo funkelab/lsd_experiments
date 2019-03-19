@@ -2,7 +2,7 @@ from funlib.segment.arrays import replace_values
 from funlib.evaluate import rand_voi
 from funlib.evaluate import expected_run_length, get_skeleton_lengths
 from pymongo import MongoClient
-from 04_mask_skeletons import roi as calyx_mask_roi
+from mask_skeletons import roi as calyx_mask_roi
 import daisy
 import json
 import logging
@@ -185,6 +185,7 @@ def evaluate(
         experiment,
         setup,
         iteration,
+        config_slab,
         fragments_file,
         fragments_dataset,
         edges_db_name,
@@ -283,7 +284,8 @@ def evaluate(
             'setup': setup,
             'iteration': iteration,
             'network_configuration': edges_db_name,
-            'merge_function': edges_collection.strip('edges_')
+            'merge_function': edges_collection.strip('edges_'),
+            'config_slab': config_slab
             }
 
     thresholds = list(np.arange(
@@ -356,7 +358,7 @@ def evaluate_parallel(
             fragment_segment_lut[1])
         print("%.3fs"%(time.time() - start))
 
-        number_of_segments = np.unique(segment_ids).size()
+        number_of_segments = np.unique(segment_ids).size
 
         num_not_changed = (segment_ids == site_fragment_lut[1]).sum()
         print("%d site segments have same ID as fragment"%num_not_changed)
@@ -367,6 +369,9 @@ def evaluate_parallel(
 
         print("Calculating expected run length...")
         start = time.time()
+
+        ######## Something goes wrong when calculating erl, all entries are zero
+
         erl, stats = expected_run_length(
                 skeletons=skeletons,
                 skeleton_id_attribute='component_id',
@@ -375,6 +380,15 @@ def evaluate_parallel(
                 skeleton_lengths=skeleton_lengths,
                 return_merge_split_stats=True)
         print("%.3fs"%(time.time() - start))
+
+        ######################################################
+
+        ######## If we comment the below two lines out, we get the cython buffer dtype mismatch error when calculating rand_voi
+
+        component_ids = component_ids.astype(np.uint64)
+        segment_ids = segment_ids.astype(np.uint64)
+
+        ######################################################
 
         print("Computing RAND and VOI on skeletons and synaptic sites...")
         start = time.time()
@@ -421,15 +435,21 @@ def evaluate_parallel(
             type(average_splits_needed))
 
         merges_needed = 0
-        for split_list in stats['split_stats'].values()
+        for split_list in stats['split_stats'].values():
             merges_needed += len(split_list)
-        average_merges_needed = merges_needed/number_of_skeletons
+        average_merges_needed = merges_needed/number_of_split_skeletons
 
-        print('Merges needed to fix splits: ', len(merges_needed), type(len(merges_needed)))
+        print('Merges needed to fix splits: ', merges_needed, type(merges_needed))
         print(
             'Average merges needed per skeleton: ',
             average_merges_needed,
             type(average_merges_needed))
+
+        ######## If we comment the below line out, we receive the error that keys need to be strings
+
+        stats = convert_keys_to_string(stats)
+
+        ##########################################################
 
         updated_report['synapse_voi_split'] = synapse_report['voi_split']
         updated_report['synapse_voi_merge'] = synapse_report['voi_merge']
@@ -441,11 +461,22 @@ def evaluate_parallel(
         updated_report['average_splits_needed_to_fix_merges'] = average_splits_needed
         updated_report['total_merges_needed_to_fix_splits'] = merges_needed
         updated_report['average_merges_needed_to_fix_splits'] = average_merges_needed
-        updated_report['merge_stats'] = stats['merge_stats']
-        updated_report['split_stats'] = stats['split_stats']
+
+        ######## If we add the below two lines to the updated report we receive BSON invalid doc error
+
+        # updated_report['merge_stats'] = stats['merge_stats']
+        # updated_report['split_stats'] = stats['split_stats']
+
+        ##########################################################
+
         updated_report.update({'threshold': threshold})
         updated_report.update(scores_config)
+
+        ######## We should ensure unique doc entries with network_configuration, merge_function, threshold
+
         scores_collection.insert(updated_report)
+
+        ##########################################################
 
         # get most severe splits/merges
         splits = sorted([(s, i) for (i, s) in report['voi_split_i'].items()])
@@ -458,6 +489,17 @@ def evaluate_parallel(
         print("10 worst merges:")
         for (s, i) in merges[-10:]:
             print("\tsegment %d\tVOI merge %.5f" % (i, s))
+
+def convert_keys_to_string(d):
+
+    new_dict = {}
+
+    for k, v in d.items():
+        if isinstance(v, dict):
+            v = convert_keys_to_string(v)
+        new_dict[str(k)] = v
+
+    return new_dict
 
 if __name__ == "__main__":
 
