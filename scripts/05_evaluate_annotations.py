@@ -16,46 +16,51 @@ import glob
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_site_fragment_lut(fragments, synaptic_sites, roi):
-    '''Get the fragment IDs of all the synaptic sites that are contained in the
-    given ROI.'''
 
-    synaptic_sites = list(synaptic_sites)
+def get_site_fragment_lut(fragments, sites, roi):
+    '''Get the fragment IDs of all the sites that are contained in the given
+    ROI.'''
 
-    if len(synaptic_sites) == 0:
-        print("No synaptic sites in %s, skipping"%roi)
+    sites = list(sites)
+
+    if len(sites) == 0:
+        logger.info("No sites in %s, skipping", roi)
         return None
 
-    print("Getting fragment IDs for %d synaptic sites in %s..."%(
-        len(synaptic_sites), roi))
+    logger.info(
+        "Getting fragment IDs for %d synaptic sites in %s...",
+        len(sites),
+        roi)
 
     # for a few sites, direct lookup is faster than memory copies
-    if len(synaptic_sites) >= 15:
+    if len(sites) >= 15:
 
-        print("Copying fragments into memory...")
+        logger.info("Copying fragments into memory...")
         start = time.time()
         fragments = fragments[roi]
         fragments.materialize()
-        print("%.3fs"%(time.time() - start,))
+        logger.info("%.3fs", time.time() - start)
 
-    print("Getting fragment IDs for synaptic sites in %s..."%roi)
+    logger.info("Getting fragment IDs for synaptic sites in %s...", roi)
     start = time.time()
 
     fragment_ids = np.array([
         fragments[daisy.Coordinate((site['z'], site['y'], site['x']))]
-        for site in synaptic_sites
+        for site in sites
     ])
     synaptic_site_ids = np.array(
-        [site['id'] for site in synaptic_sites],
+        [site['id'] for site in sites],
         dtype=np.uint64)
 
-    print("Got fragment IDs for %d sites in %.3fs"%(
+    logger.info(
+        "Got fragment IDs for %d sites in %.3fs",
         len(fragment_ids),
-        time.time() - start))
+        time.time() - start)
 
     lut = np.array([synaptic_site_ids, fragment_ids])
 
     return lut
+
 
 def store_lut_in_block(
         annotations_db_host,
@@ -65,22 +70,22 @@ def store_lut_in_block(
         fragments,
         block):
 
-    print("Finding fragment IDs in block %s"%block)
+    logger.info("Finding fragment IDs in block %s", block)
 
     # get all skeleton nodes (which include synaptic sites)
     client = MongoClient(annotations_db_host)
     database = client[annotations_db_name]
     skeletons_collection = \
-            database[annotations_skeletons_collection_name + '.nodes']
+        database[annotations_skeletons_collection_name + '.nodes']
 
     bz, by, bx = block.read_roi.get_begin()
     ez, ey, ex = block.read_roi.get_end()
 
     site_nodes = skeletons_collection.find(
         {
-            'z': { '$gte': bz, '$lt': ez },
-            'y': { '$gte': by, '$lt': ey },
-            'x': { '$gte': bx, '$lt': ex }
+            'z': {'$gte': bz, '$lt': ez},
+            'y': {'$gte': by, '$lt': ey},
+            'x': {'$gte': bx, '$lt': ex}
         })
 
     # get site -> fragment ID
@@ -98,15 +103,78 @@ def store_lut_in_block(
         str(block.block_id) + '.npz')
     np.savez_compressed(block_lut_path, site_fragment_lut=site_fragment_lut)
 
-def prepare_evaluate(
+
+def prepare_for_roi(
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        annotations_synapses_collection_name,
+        roi):
+
+    logger.info("Preparing evaluation for ROI %s..." % roi)
+
+    skeletons = read_skeletons(
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        roi)
+
+    # array with site IDs
+    site_ids = np.array([n for n in skeletons.nodes()], dtype=np.uint64)
+
+    # array with component ID for each site
+    site_component_ids = np.array([
+        data['component_id']
+        for _, data in skeletons.nodes(data=True)
+    ])
+    assert site_component_ids.min() >= 0
+    site_component_ids = site_component_ids.astype(np.uint64)
+
+    # create a mask that limits sites to synaptic sites
+    logger.info("Creating synaptic sites mask...")
+    start = time.time()
+    client = MongoClient(annotations_db_host)
+    database = client[annotations_db_name]
+    synapses_collection = \
+        database[annotations_synapses_collection_name + '.edges']
+    synaptic_sites = synapses_collection.find()
+    synaptic_sites = np.unique([
+        s
+        for ss in synaptic_sites
+        for s in [ss['source'], ss['target']]
+    ])
+    synaptic_sites_mask = np.isin(site_ids, synaptic_sites)
+    logger.info("%.3fs", time.time() - start)
+
+    logger.info("Calcluating skeleton lengths...")
+    start = time.time()
+    skeleton_lengths = get_skeleton_lengths(
+            skeletons,
+            skeleton_position_attributes=['z', 'y', 'x'],
+            skeleton_id_attribute='component_id',
+            store_edge_length='length')
+    logger.info("%.3fs", time.time() - start)
+
+    return {
+        'skeletons': skeletons,
+        'site_ids': site_ids,
+        'site_component_ids': site_component_ids,
+        'synaptic_sites_mask': synaptic_sites_mask,
+        'skeleton_lengths': skeleton_lengths
+    }
+
+
+def prepare_for_fragments(
         fragments_file,
         fragments_dataset,
         annotations_db_host,
         annotations_db_name,
         annotations_skeletons_collection_name,
-        **kwargs):
+        site_ids):
+    '''Returns the fragment ID for each site in site_ids.'''
 
-    # open fragments
+    logger.info("Preparing evaluation for fragments in %s..." % fragments_file)
+
     fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r')
     roi = fragments.roi
 
@@ -114,29 +182,62 @@ def prepare_evaluate(
         fragments_file,
         'luts/site_fragment')
 
-    if os.path.exists(site_fragment_lut_directory):
-        logger.warn("site-fragment LUT already exists, skipping preparation")
-        return
-    os.makedirs(site_fragment_lut_directory)
+    if not os.path.exists(site_fragment_lut_directory):
 
-    # 2. store site->fragement ID LUT in file, for each block
-    daisy.run_blockwise(
-        roi,
-        daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
-        daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
-        lambda b: store_lut_in_block(
-            annotations_db_host,
-            annotations_db_name,
-            annotations_skeletons_collection_name,
-            site_fragment_lut_directory,
-            fragments,
-            b),
-        num_workers=10,
-        fit='shrink')
+        logger.info("site-fragment LUT does not exist, creating it...")
+
+        os.makedirs(site_fragment_lut_directory)
+        daisy.run_blockwise(
+            roi,
+            daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
+            daisy.Roi((0, 0, 0), (10000, 10000, 10000)),
+            lambda b: store_lut_in_block(
+                annotations_db_host,
+                annotations_db_name,
+                annotations_skeletons_collection_name,
+                site_fragment_lut_directory,
+                fragments,
+                b),
+            num_workers=10,
+            fit='shrink')
+
+    else:
+
+        logger.info("site-fragment LUT already exists, skipping preparation")
+
+    logger.info("Reading site-fragment LUT...")
+    start = time.time()
+    lut_files = glob.glob(
+        os.path.join(
+            fragments_file,
+            'luts/site_fragment/*.npz'))
+    site_fragment_lut = np.concatenate(
+        [
+            np.load(f)['site_fragment_lut']
+            for f in lut_files
+        ],
+        axis=1)
+    assert site_fragment_lut.dtype == np.uint64
+    logger.info(
+        "Found %d sites in site-fragment LUT",
+        len(site_fragment_lut[0]))
+    logger.info("%.3fs", time.time() - start)
+
+    # convert to dictionary
+    site_fragment_lut = {
+        site: fragment
+        for site, fragment in zip(site_fragment_lut[0], site_fragment_lut[1])
+    }
+
+    # create fragment ID array congruent to site_ids
+    site_fragment_ids = np.array([site_fragment_lut[s] for s in site_ids])
+
+    return site_fragment_ids
+
 
 def read_skeletons(
-        annotations_db_name,
         annotations_db_host,
+        annotations_db_name,
         annotations_skeletons_collection_name,
         roi):
 
@@ -147,7 +248,7 @@ def read_skeletons(
             roi, calyx_mask_roi)
 
     # get all skeletons that are masked in
-    print("Fetching all skeletons...")
+    logger.info("Fetching all skeletons...")
     skeletons_provider = daisy.persistence.MongoDbGraphProvider(
         annotations_db_name,
         annotations_db_host,
@@ -164,8 +265,8 @@ def read_skeletons(
     skeletons = skeletons_provider.get_graph(
         roi,
         nodes_filter={'masked': True})
-    print("Found %d skeleton nodes" % skeletons.number_of_nodes())
-    print("%.3fs"%(time.time() - start))
+    logger.info("Found %d skeleton nodes" % skeletons.number_of_nodes())
+    logger.info("%.3fs", time.time() - start)
 
     # remove outside edges and nodes
     remove_nodes = []
@@ -173,13 +274,17 @@ def read_skeletons(
         if 'z' not in data:
             remove_nodes.append(node)
         else:
-            assert data['masked'] == True
+            assert data['masked']
             assert data['component_id'] >= 0
-    print("Removing %d nodes that were outside of ROI"%len(remove_nodes))
+
+    logger.info(
+        "Removing %d nodes that were outside of ROI",
+        len(remove_nodes))
     for node in remove_nodes:
         skeletons.remove_node(node)
 
     return skeletons
+
 
 def evaluate(
         experiment,
@@ -202,94 +307,36 @@ def evaluate(
         thresholds_step,
         **kwargs):
 
-    print("Preparing site-fragment LUT...")
-    start = time.time()
-    prepare_evaluate(
+    roi = daisy.Roi(roi_offset, roi_shape)
+
+    roi_data = prepare_for_roi(
+        annotations_db_host,
+        annotations_db_name,
+        annotations_skeletons_collection_name,
+        annotations_synapses_collection_name,
+        roi)
+    site_ids = roi_data['site_ids']
+    synaptic_sites_mask = roi_data['synaptic_sites_mask']
+    site_component_ids = roi_data['site_component_ids']
+    skeletons = roi_data['skeletons']
+    skeleton_lengths = roi_data['skeleton_lengths']
+
+    site_fragment_ids = prepare_for_fragments(
         fragments_file,
         fragments_dataset,
         annotations_db_host,
         annotations_db_name,
-        annotations_skeletons_collection_name)
-    print("%.3fs"%(time.time() - start))
-
-    roi = daisy.Roi(roi_offset, roi_shape)
-
-    print("Reading skeletons...")
-    start = time.time()
-    skeletons = read_skeletons(
-        annotations_db_name,
-        annotations_db_host,
         annotations_skeletons_collection_name,
-        roi)
-    print("%.3fs"%(time.time() - start))
-
-    print("Reading site-fragment LUT...")
-    start = time.time()
-    lut_files = glob.glob(
-        os.path.join(
-            fragments_file,
-            'luts/site_fragment/*.npz'))
-    site_fragment_lut = np.concatenate(
-        [
-            np.load(f)['site_fragment_lut']
-            for f in lut_files
-        ],
-        axis=1)
-    assert site_fragment_lut.dtype == np.uint64
-    print("Found %d sites in site-fragment LUT" % len(site_fragment_lut[0]))
-    print("%.3fs"%(time.time() - start))
-
-    # limit to relevant sites within requested ROI and mask
-    relevant_mask = np.array([
-        skeletons.has_node(site)
-        for site in site_fragment_lut[0]
-    ])
-    site_fragment_lut = site_fragment_lut[:,relevant_mask]
-    print("Limited site-fragment LUT to %d relevant sites within ROI"%len(site_fragment_lut[0]))
-    if len(site_fragment_lut[0]) < 100:
-        print("Found sites: ", site_fragment_lut[0])
-
-    # array with component ID for each site (does not change between
-    # thresholds)
-    component_ids = np.array([
-        skeletons.nodes[site]['component_id']
-        for site in site_fragment_lut[0]
-    ])
-    assert component_ids.min() >= 0
-    component_ids = component_ids.astype(np.uint64)
-
-    # create a mask (for the site-fragment-LUT) that limits it to synaptic sites
-    print("Creating synaptic sites mask...")
-    start = time.time()
-    client = MongoClient(annotations_db_host)
-    database = client[annotations_db_name]
-    synapses_collection = database[annotations_synapses_collection_name + '.edges']
-    synaptic_sites = synapses_collection.find()
-    synaptic_sites = np.unique([
-        s
-        for ss in synaptic_sites
-        for s in [ss['source'], ss['target']]
-    ])
-    synaptic_sites_mask = np.isin(site_fragment_lut[0], synaptic_sites)
-    print("%.3fs"%(time.time() - start))
-
-    print("Calcluating skeleton lengths...")
-    start = time.time()
-    skeleton_lengths = get_skeleton_lengths(
-            skeletons,
-            skeleton_position_attributes=['z', 'y', 'x'],
-            skeleton_id_attribute='component_id',
-            store_edge_length='length')
-    print("%.3fs"%(time.time() - start))
+        site_ids)
 
     scores_config = {
-            'experiment': experiment,
-            'setup': setup,
-            'iteration': iteration,
-            'network_configuration': edges_db_name,
-            'merge_function': edges_collection.strip('edges_'),
-            'config_slab': config_slab
-            }
+        'experiment': experiment,
+        'setup': setup,
+        'iteration': iteration,
+        'network_configuration': edges_db_name,
+        'merge_function': edges_collection.strip('edges_'),
+        'config_slab': config_slab
+    }
 
     thresholds = list(np.arange(
         thresholds_minmax[0],
@@ -298,20 +345,20 @@ def evaluate(
 
     procs = []
 
-    print("Evaluating thresholds...")
-    start = time.time()
+    logger.info("Evaluating thresholds...")
     for threshold in thresholds:
         proc = mp.Process(
-                target=evaluate_parallel,
+                target=evaluate_threshold,
                 args=(
-                    fragments_file,
-                    edges_collection,
-                    site_fragment_lut,
+                    site_ids,
+                    site_fragment_ids,
+                    site_component_ids,
                     synaptic_sites_mask,
-                    component_ids,
                     skeletons,
                     skeleton_lengths,
                     threshold,
+                    fragments_file,
+                    edges_collection,
                     scores_config,
                     scores_db_host,
                     scores_db_name
@@ -321,169 +368,234 @@ def evaluate(
 
     for proc in procs:
         proc.join()
-    print("%.3fs"%(time.time() - start))
 
-def evaluate_parallel(
+
+def get_site_segment_ids(
+        site_fragment_ids,
         fragments_file,
         edges_collection,
-        site_fragment_lut,
+        threshold):
+
+    # get fragment-segment LUT
+    logger.info("Reading fragment-segment LUT...")
+    start = time.time()
+    fragment_segment_lut_file = os.path.join(
+        fragments_file,
+        'luts',
+        'fragment_segment',
+        'seg_%s_%d.npz' % (edges_collection, int(threshold*100)))
+    fragment_segment_lut = np.load(
+        fragment_segment_lut_file)['fragment_segment_lut']
+    assert fragment_segment_lut.dtype == np.uint64
+    logger.info("%.3fs", time.time() - start)
+
+    # get the segment ID for each site
+    logger.info("Mapping sites to segments...")
+    start = time.time()
+    site_segment_ids = replace_values(
+        site_fragment_ids,
+        fragment_segment_lut[0],
+        fragment_segment_lut[1])
+    logger.info("%.3fs", time.time() - start)
+
+    return site_segment_ids
+
+
+def compute_expected_run_length(
+        site_ids,
+        site_segment_ids,
+        skeletons,
+        skeleton_lengths):
+
+    logger.info("Calculating expected run length...")
+    start = time.time()
+
+    node_segment_lut = {
+        site: segment for site, segment in zip(site_ids, site_segment_ids)
+    }
+
+    erl, stats = expected_run_length(
+            skeletons=skeletons,
+            skeleton_id_attribute='component_id',
+            edge_length_attribute='length',
+            node_segment_lut=node_segment_lut,
+            skeleton_lengths=skeleton_lengths,
+            return_merge_split_stats=True)
+
+    split_stats = [
+        {
+            'comp_id': int(comp_id),
+            'seg_ids': [(int(a), int(b)) for a, b in seg_ids]
+        }
+        for comp_id, seg_ids in stats['split_stats'].items()
+    ]
+    merge_stats = [
+        {
+            'seg_id': int(seg_id),
+            'comp_ids': [int(comp_id) for comp_id in comp_ids]
+        }
+        for seg_id, comp_ids in stats['merge_stats'].items()
+    ]
+
+    logger.info("%.3fs", time.time() - start)
+
+    return erl, split_stats, merge_stats
+
+
+def compute_splits_merges_needed(
+        split_stats,
+        merge_stats):
+
+    splits_needed = 0
+    for merge in merge_stats:
+        splits_needed += compute_splits_needed(
+            merge['seg_id'],
+            merge['comp_ids'])
+
+    merges_needed = 0
+    for split in split_stats:
+        merges_needed += len(split['seg_ids']) - 1
+
+    return splits_needed, merges_needed
+
+
+def compute_splits_needed(
+        segment_id,
+        component_ids):
+
+    # for now, simple heuristic
+    return len(component_ids) - 1
+
+    # get RAG for segment ID
+
+    # replace merge_score with weight
+
+    # find fragments for each component
+
+    # call split_graph
+
+
+def compute_rand_voi(
+        site_component_ids,
+        site_segment_ids,
+        return_cluster_scores=False):
+
+    logger.info("Computing RAND and VOI...")
+    start = time.time()
+
+    rand_voi_report = rand_voi(
+        np.array([[site_component_ids]]),
+        np.array([[site_segment_ids]]),
+        return_cluster_scores=return_cluster_scores)
+
+    logger.info("VOI split: %f", rand_voi_report['voi_split'])
+    logger.info("VOI merge: %f", rand_voi_report['voi_merge'])
+    logger.info("%.3fs", time.time() - start)
+
+    return rand_voi_report
+
+
+def evaluate_threshold(
+        site_ids,
+        site_fragment_ids,
+        site_component_ids,
         synaptic_sites_mask,
-        component_ids,
         skeletons,
         skeleton_lengths,
         threshold,
+        fragments_file,
+        edges_collection,
         scores_config,
         scores_db_host,
         scores_db_name):
 
-        scores_client = MongoClient(scores_db_host)
-        scores_db = scores_client[scores_db_name]
-        scores_collection = scores_db['scores']
+    scores_client = MongoClient(scores_db_host)
+    scores_db = scores_client[scores_db_name]
+    scores_collection = scores_db['scores']
 
-        # get fragment-segment LUT
-        print("Reading fragment-segment LUT...")
-        start = time.time()
-        fragment_segment_lut_file = os.path.join(
-            fragments_file,
-            'luts',
-            'fragment_segment',
-            'seg_%s_%d.npz'%(edges_collection,int(threshold*100)))
-        fragment_segment_lut = np.load(
-            fragment_segment_lut_file)['fragment_segment_lut']
-        assert fragment_segment_lut.dtype == np.uint64
-        print("%.3fs"%(time.time() - start))
+    site_segment_ids = get_site_segment_ids(
+        site_fragment_ids,
+        fragments_file,
+        edges_collection,
+        threshold)
 
-        # get the segment ID for each site
-        print("Mapping sites to segments...")
-        start = time.time()
-        segment_ids = replace_values(
-            site_fragment_lut[1],
-            fragment_segment_lut[0],
-            fragment_segment_lut[1])
-        print("%.3fs"%(time.time() - start))
+    number_of_segments = np.unique(site_segment_ids).size
 
-        number_of_segments = np.unique(segment_ids).size
+    erl, split_stats, merge_stats = compute_expected_run_length(
+        site_ids,
+        site_segment_ids,
+        skeletons,
+        skeleton_lengths)
 
-        num_not_changed = (segment_ids == site_fragment_lut[1]).sum()
-        print("%d site segments have same ID as fragment"%num_not_changed)
+    number_of_split_skeletons = len(split_stats)
+    number_of_merging_segments = len(merge_stats)
 
-        node_segment_lut = {
-            site: segment for site, segment in zip(site_fragment_lut[0], segment_ids)
-        }
+    splits_needed, merges_needed = compute_splits_merges_needed(
+        split_stats,
+        merge_stats)
 
-        print("Calculating expected run length...")
-        start = time.time()
+    average_splits_needed = splits_needed/number_of_segments
+    average_merges_needed = merges_needed/number_of_split_skeletons
 
-        erl, stats = expected_run_length(
-                skeletons=skeletons,
-                skeleton_id_attribute='component_id',
-                edge_length_attribute='length',
-                node_segment_lut=node_segment_lut,
-                skeleton_lengths=skeleton_lengths,
-                return_merge_split_stats=True)
-        print("%.3fs"%(time.time() - start))
+    rand_voi_report = compute_rand_voi(
+        site_component_ids,
+        site_segment_ids,
+        return_cluster_scores=True)
 
-        ######################################################
+    synapse_rand_voi_report = compute_rand_voi(
+        site_component_ids[synaptic_sites_mask],
+        site_segment_ids[synaptic_sites_mask])
 
-        ######## If we comment the below two lines out, we get the cython buffer dtype mismatch error when calculating rand_voi
+    report = rand_voi_report.copy()
+    for k in {'voi_split_i', 'voi_merge_j'}:
+        del report[k]
+    report['synapse_voi_split'] = synapse_rand_voi_report['voi_split']
+    report['synapse_voi_merge'] = synapse_rand_voi_report['voi_merge']
+    report['expected_run_length'] = erl
+    report['number_of_segments'] = number_of_segments
+    report['number_of_merging_segments'] = number_of_merging_segments
+    report['number_of_split_skeletons'] = number_of_split_skeletons
+    report['total_splits_needed_to_fix_merges'] = splits_needed
+    report['average_splits_needed_to_fix_merges'] = average_splits_needed
+    report['total_merges_needed_to_fix_splits'] = merges_needed
+    report['average_merges_needed_to_fix_splits'] = average_merges_needed
+    report['merge_stats'] = merge_stats
+    report['split_stats'] = split_stats
+    report['threshold'] = threshold
+    report.update(scores_config)
 
-        # segment_ids = segment_ids.astype(np.uint64)
+    scores_collection.replace_one(
+        filter={
+            'network_configuration': report['network_configuration'],
+            'merge_function': report['merge_function'],
+            'threshold': report['threshold']
+        },
+        replacement=report,
+        upsert=True)
 
-        ######################################################
+    find_worst_split_merges(rand_voi_report)
 
-        print("Computing RAND and VOI on skeletons and synaptic sites...")
-        start = time.time()
-        report = rand_voi(
-            np.array([[component_ids]]),
-            np.array([[segment_ids]]),
-            return_cluster_scores=True)
-        print("VOI split: ", report['voi_split'])
-        print("VOI merge: ", report['voi_merge'])
 
-        remove_keys = {'voi_split_i', 'voi_merge_j'}
-        updated_report = report.copy()
-        for k in remove_keys:
-            updated_report.pop(k, None)
+def find_worst_split_merges(rand_voi_report):
 
-        synapse_report = rand_voi(
-            np.array([[component_ids[synaptic_sites_mask]]]),
-            np.array([[segment_ids[synaptic_sites_mask]]]))
-        print("%.3fs"%(time.time() - start))
+    # get most severe splits/merges
+    splits = sorted([
+        (s, i)
+        for (i, s) in rand_voi_report['voi_split_i'].items()
+    ])
+    merges = sorted([
+        (s, j)
+        for (j, s) in rand_voi_report['voi_merge_j'].items()
+    ])
 
-        merge_stats = [
-            { 
-                'seg_id': int(seg_id),
-                'comp_ids': [int(comp_id) for comp_id in comp_ids]
-            }
-            for seg_id, comp_ids in stats['merge_stats'].items()
-        ]
-        split_stats = [
-            {
-                'comp_id': int(comp_id),
-                'seg_ids': [(int(a), int(b)) for a, b in seg_ids]
-            }
-            for comp_id, seg_ids in stats['split_stats'].items()
-        ]
+    logger.info("10 worst splits:")
+    for (s, i) in splits[-10:]:
+        logger.info("\tcomponent %d\tVOI split %.5f" % (i, s))
 
-        number_of_merging_segments = len(merge_stats)
-        number_of_split_skeletons = len(split_stats)
+    logger.info("10 worst merges:")
+    for (s, i) in merges[-10:]:
+        logger.info("\tsegment %d\tVOI merge %.5f" % (i, s))
 
-        # TODO: this should be replaced with a min-cut iterative proof-reading
-        # simulation
-        splits_needed = 0
-        for k, v in stats['merge_stats'].items():
-            splits_needed += (len(v) - 1)
-        print('Splits needed to fix merges: ', splits_needed, type(splits_needed))
-
-        average_splits_needed = splits_needed/number_of_segments
-        print(
-            'Average splits needed per segment: ',
-            average_splits_needed,
-            type(average_splits_needed))
-
-        merges_needed = 0
-        for split_list in stats['split_stats'].values():
-            merges_needed += len(split_list)
-        average_merges_needed = merges_needed/number_of_split_skeletons
-
-        print('Merges needed to fix splits: ', merges_needed, type(merges_needed))
-        print(
-            'Average merges needed per skeleton: ',
-            average_merges_needed,
-            type(average_merges_needed))
-
-        updated_report['synapse_voi_split'] = synapse_report['voi_split']
-        updated_report['synapse_voi_merge'] = synapse_report['voi_merge']
-        updated_report['expected_run_length'] = erl
-        updated_report['number_of_segments'] = number_of_segments
-        updated_report['number_of_merging_segments'] = number_of_merging_segments
-        updated_report['number_of_split_skeletons'] = number_of_split_skeletons
-        updated_report['total_splits_needed_to_fix_merges'] = splits_needed
-        updated_report['average_splits_needed_to_fix_merges'] = average_splits_needed
-        updated_report['total_merges_needed_to_fix_splits'] = merges_needed
-        updated_report['average_merges_needed_to_fix_splits'] = average_merges_needed
-        updated_report['merge_stats'] = merge_stats
-        updated_report['split_stats'] = split_stats
-        updated_report['threshold'] = threshold
-        updated_report.update(scores_config)
-
-        ######## We should ensure unique doc entries with network_configuration, merge_function, threshold
-
-        scores_collection.insert(updated_report)
-
-        ##########################################################
-
-        # get most severe splits/merges
-        splits = sorted([(s, i) for (i, s) in report['voi_split_i'].items()])
-        merges = sorted([(s, j) for (j, s) in report['voi_merge_j'].items()])
-
-        print("10 worst splits:")
-        for (s, i) in splits[-10:]:
-            print("\tcomponent %d\tVOI split %.5f" % (i, s))
-
-        print("10 worst merges:")
-        for (s, i) in merges[-10:]:
-            print("\tsegment %d\tVOI merge %.5f" % (i, s))
 
 if __name__ == "__main__":
 
