@@ -121,8 +121,8 @@ def create_config(input_shape, output_shape, num_dims, name):
 
 if __name__ == "__main__":
 
-    z=0
-    xy=0
+    z=18
+    xy=162
 
     train_input_shape = (120, 484, 484)
     train_intermediate_shape = (84, 268, 268)
@@ -131,6 +131,9 @@ if __name__ == "__main__":
     create_auto(train_input_shape, train_intermediate_shape, 'train_auto_net')
     create_affs(train_input_shape, train_intermediate_shape, train_output_shape, 'train_net')
 
-    #todo: figure out predict network shapes
+    test_input_shape = (96+z, 484+xy, 484+xy)
+    test_output_shape = (78, 434, 434)
 
-    create_config(train_input_shape, train_output_shape, 3, 'config')
+    create_affs(test_input_shape, test_input_shape, test_output_shape, 'test_net')
+
+    create_config(test_input_shape, test_output_shape, 3, 'config')
