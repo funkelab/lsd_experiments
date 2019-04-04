@@ -10,7 +10,7 @@ import pymongo
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-with open(os.path.join(setup_dir, 'test_net.json'), 'r') as f:
+with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
     net_config = json.load(f)
 
 # voxels
@@ -53,8 +53,6 @@ def predict(
         iteration,
         raw_file,
         raw_dataset,
-        auto_file,
-        auto_dataset,
         out_file,
         out_dataset,
         db_host,
@@ -63,76 +61,68 @@ def predict(
         **kwargs):
 
     raw = ArrayKey('RAW')
-    auto = ArrayKey('PRETRAINED_LSD')
+    lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
-    chunk_request.add(auto, input_size)
+    chunk_request.add(lsds, output_size)
     chunk_request.add(affs, output_size)
 
-    pipeline = (
-            (
-                ZarrSource(
-                    raw_file,
-                    datasets = {
-                        raw: raw_dataset
-                    },
-                    array_specs = {
-                        raw: ArraySpec(interpolatable=True)
-                    }
-                ) +
-                Pad(raw, size=None) +
-                Normalize(raw) +
-                IntensityScaleShift(raw, 2,-1),
+    pipeline = ZarrSource(
+            raw_file,
+            datasets = {
+                raw: raw_dataset
+            },
+            array_specs = {
+                raw: ArraySpec(interpolatable=True),
+            }
+        )
 
-                ZarrSource(
-                    auto_file,
-                    datasets = {
-                        auto: auto_dataset
-                    },
-                    array_specs = {
-                        auto: ArraySpec(interpolatable=True)
-                    }
-                ) +
-                Pad(auto, size=None)
-            ) +
-            MergeProvider() +
-            Predict(
-                checkpoint=os.path.join(
-                    setup_dir,
-                    'train_net_checkpoint_%d'%iteration),
-                graph=os.path.join(setup_dir, 'test_net.meta'),
-                inputs={
-                    net_config['pretrained_lsd']: auto,
-                    net_config['raw']: raw
-                },
-                outputs={
-                    net_config['affs']: affs
-                }
-            ) +
-            IntensityScaleShift(affs, 255, 0) +
-            ZarrWrite(
-                dataset_names={
-                    affs: out_dataset,
-                },
-                output_filename=out_file
-            ) +
-            PrintProfilingStats(every=10)+
-            DaisyRequestBlocks(
-                chunk_request,
-                roi_map={
-                    raw: 'read_roi',
-                    auto: 'read_roi',
-                    affs: 'write_roi'
-                },
-                num_workers=worker_config['num_cache_workers'],
-                block_done_callback=lambda b, s, d: block_done_callback(
-                    db_host,
-                    db_name,
-                    worker_config,
-                    b, s, d))
-            )
+    pipeline += Pad(raw, size=None)
+
+    pipeline += Normalize(raw)
+
+    pipeline += IntensityScaleShift(raw, 2,-1)
+
+    pipeline += Predict(
+            os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            inputs={
+                net_config['raw']: raw
+            },
+            outputs={
+                net_config['embedding']: lsds,
+                net_config['affs']: affs
+            },
+            graph=os.path.join(setup_dir, 'config.meta')
+        )
+
+    pipeline += IntensityScaleShift(affs, 255, 0)
+    pipeline += IntensityScaleShift(lsds, 255, 0)
+
+    pipeline += ZarrWrite(
+            dataset_names={
+                lsds: 'volumes/lsds',
+                affs: 'volumes/affs'
+            },
+            output_filename=out_file
+        )
+    pipeline += PrintProfilingStats(every=10)
+
+    pipeline += DaisyRequestBlocks(
+            chunk_request,
+            roi_map={
+                raw: 'read_roi',
+                affs: 'write_roi',
+                lsds: 'write_roi'
+            },
+            num_workers=worker_config['num_cache_workers'],
+            block_done_callback=lambda b, s, d: block_done_callback(
+                db_host,
+                db_name,
+                worker_config,
+                b, s, d))
+
 
     print("Starting prediction...")
     with build(pipeline):

@@ -66,6 +66,9 @@ def predict(
     in_affs = ArrayKey('PRETRAINED_AFFS')
     out_affs = ArrayKey('AFFS')
 
+    print('Raw file is: %s, Raw dataset is: %s'%(raw_file, raw_dataset))
+    print('Auto file is: %s, Auto dataset is: %s'%(auto_file, auto_dataset))
+
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
     chunk_request.add(in_affs, input_size)
@@ -95,7 +98,8 @@ def predict(
                         in_affs: ArraySpec(interpolatable=True)
                     }
                 ) +
-                Pad(in_affs, size=None)
+                Pad(in_affs, size=None) +
+                Normalize(in_affs)
             ) +
             MergeProvider() +
             Predict(
@@ -103,6 +107,7 @@ def predict(
                     setup_dir,
                     'train_net_checkpoint_%d'%iteration),
                 graph=os.path.join(setup_dir, 'test_net.meta'),
+                max_shared_memory=(2*1024*1024*1024),
                 inputs={
                     net_config['pretrained_affs']: in_affs,
                     net_config['raw']: raw
