@@ -17,7 +17,19 @@ edges_collection = 'calyx_catmaid.edges'
 
 roi = daisy.Roi(
     (158000, 121800, 403560),
-    (76000, 52000, 64000))
+    (76000, 52000, 44800))
+
+# validation_roi = daisy.Roi(
+    # (158000, 121800, 448360),
+    # (76000, 52000, 19200))
+
+# test_roi = daisy.Roi(
+    # (158000, 121800, 403560),
+    # (76000, 52000, 44800))
+
+# calyx_roi = daisy.Roi(
+    # (158000, 121800, 403560),
+    # (76000, 52000, 64000))
 
 if __name__ == "__main__":
 
@@ -30,8 +42,8 @@ if __name__ == "__main__":
         endpoint_names=['source', 'target'],
         position_attribute=['z', 'y', 'x'],
         node_attribute_collections={
-            'calyx_neuropil_mask': ['masked'],
-            'calyx_neuropil_components': ['component_id'],
+            'calyx_neuropil_mask_testing': ['masked'],
+            'calyx_neuropil_components_testing': ['component_id'],
         })
 
     print("Reading graph in %s" % roi)
@@ -48,6 +60,9 @@ if __name__ == "__main__":
     start = time.time()
     for node, data in graph.nodes(data=True):
 
+        if 'z' not in data:
+            continue
+
         pos = daisy.Coordinate((data[d] for d in ['z', 'y', 'x']))
         data['masked'] = bool(mask[pos])
 
@@ -58,9 +73,9 @@ if __name__ == "__main__":
 
     print("%.3fs"%(time.time() - start))
 
-    # remove outside edges and nodes
     remove_nodes = []
     filtered_graph = daisy.Graph(graph_data=graph)
+    # remove outside edges and nodes
     for node, data in filtered_graph.nodes(data=True):
         if 'z' not in data or not data['masked']:
             remove_nodes.append(node)
