@@ -10,7 +10,7 @@ import pymongo
 import psutil
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 
 def extract_fragments(
         experiment,
@@ -121,7 +121,7 @@ def start_worker(config_file, network_dir, queue):
 
     daisy.call([
         'run_lsf',
-        '-c', '8',
+        '-c', '1',
         '-g', '0',
         '-q', queue,
         '-b',
@@ -133,11 +133,11 @@ def start_worker(config_file, network_dir, queue):
 
 def check_block(blocks_extracted, block):
 
-    print("Checking if block %s is complete..."%block.write_roi)
+    # print("Checking if block %s is complete..."%block.write_roi)
 
     done = blocks_extracted.count({'block_id': block.block_id}) >= 1
 
-    print("Block %s is %s" % (block, "done" if done else "NOT done"))
+    # print("Block %s is %s" % (block, "done" if done else "NOT done"))
 
     return done
 
@@ -195,7 +195,7 @@ def extract_fragments_worker(
         host=db_host,
         mode='r+',
         directed=False,
-        position_attribute=['center_z, center_y, center_x']
+        position_attribute=['center_z', 'center_y', 'center_x']
         )
     logging.info("RAG DB opened")
 
@@ -206,15 +206,15 @@ def extract_fragments_worker(
 
     client = daisy.Client()
 
-    num_blocks = 0
+    #num_blocks = 0
 
-    process = psutil.Process(os.getpid())
+    #process = psutil.Process(os.getpid())
 
     while True:
 
         block = client.acquire_block()
 
-        num_blocks += 1
+        #num_blocks += 1
 
         if not block:
             return
@@ -230,7 +230,7 @@ def extract_fragments_worker(
             epsilon_agglomerate=epsilon_agglomerate,
             mask=mask)
 
-        logging.info("Process %d blocks consume current memory usage %d", num_blocks, process.memory_info().rss)
+        #logging.info("Process %d consumes %d bytes", num_blocks, process.memory_info().rss)
 
         document = {
             'num_cpus': 5,
