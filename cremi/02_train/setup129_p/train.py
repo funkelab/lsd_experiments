@@ -17,6 +17,9 @@ data_dir = '../../01_data/glia_mask/'
 artifacts_dir = '../../01_data/training/'
 
 samples = [
+    'sample_0',
+    'sample_1',
+    'sample_2',
     'sample_A',
     'sample_B',
     'sample_C'
@@ -134,13 +137,13 @@ def train_until(max_iteration):
             subsample=8) +
         SimpleAugment(transpose_only=[1, 2]) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddLocalShapeDescriptor(
             labels,
             gt_embedding,
             mask=gt_embedding_scale,
             sigma=160,
             downsample=2) +
-        GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
             neighborhood,
             labels=labels,

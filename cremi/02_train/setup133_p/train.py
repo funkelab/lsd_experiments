@@ -17,6 +17,9 @@ data_dir = '../../01_data/glia_mask/'
 artifacts_dir = '../../01_data/training/'
 
 samples = [
+    'sample_0',
+    'sample_1',
+    'sample_2',
     'sample_A',
     'sample_B',
     'sample_C'

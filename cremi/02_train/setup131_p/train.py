@@ -17,6 +17,9 @@ data_dir = '../../01_data/glia_mask/'
 artifacts_dir = '../../01_data/training/'
 
 samples = [
+    'sample_0',
+    'sample_1',
+    'sample_2',
     'sample_A',
     'sample_B',
     'sample_C'
@@ -138,7 +141,7 @@ def train_until(max_iteration):
             labels,
             gt_embedding,
             mask=gt_embedding_scale,
-            sigma=160,
+            sigma=80,
             downsample=2) +
         GrowBoundary(labels, labels_mask, steps=1, only_xy=True) +
         AddAffinities(
