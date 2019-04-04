@@ -17,10 +17,12 @@ def find_segments(
         db_name,
         fragments_file,
         edges_collection,
-        thresholds_minmax,
-        thresholds_step,
         roi_offset,
         roi_shape,
+        thresholds_minmax=None,
+        thresholds_step=None,
+        threshold=None,
+        run_type=None,
         **kwargs):
 
     '''
@@ -110,41 +112,53 @@ def find_segments(
         'luts',
         'fragment_segment')
 
+    if run_type:
+        out_dir = os.path.join(out_dir, run_type)
+
     os.makedirs(out_dir, exist_ok=True)
 
-    thresholds = list(np.arange(
-        thresholds_minmax[0],
-        thresholds_minmax[1],
-        thresholds_step))
+    if run_type == 'testing':
 
-    procs = []
-    start = time.time()
+        start = time.time()
 
-    for threshold in thresholds:
-        proc = mp.Process(
-                target=create_lut,
-                args=(
-                    edges_collection,
-                    out_dir,
+        get_connected_components(
+                nodes,
+                edges,
+                scores,
+                threshold,
+                edges_collection,
+                out_dir)
+
+        print("Created and stored testing lookup table in %.3fs" % (time.time() - start))
+
+    else:
+
+        thresholds = list(np.arange(
+            thresholds_minmax[0],
+            thresholds_minmax[1],
+            thresholds_step))
+
+        start = time.time()
+
+        for threshold in thresholds:
+
+            get_connected_components(
                     nodes,
                     edges,
                     scores,
-                    threshold))
-        procs.append(proc)
-        proc.start()
+                    threshold,
+                    edges_collection,
+                    out_dir)
 
-    for proc in procs:
-        proc.join()
+        print("Created and stored lookup tables in %.3fs" % (time.time() - start))
 
-    print("Created and stored lookup tables in %.3fs" % (time.time() - start))
-
-def create_lut(
-        edges_collection,
-        out_dir,
+def get_connected_components(
         nodes,
         edges,
         scores,
         threshold,
+        edges_collection,
+        out_dir,
         **kwargs):
 
     print("Getting CCs for threshold %.3f..." % threshold)
@@ -168,6 +182,7 @@ def create_lut(
     np.savez_compressed(out_file, fragment_segment_lut=lut)
 
     print("%.3fs" % (time.time() - start))
+
 
 if __name__ == "__main__":
 
