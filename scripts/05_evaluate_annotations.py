@@ -1,17 +1,21 @@
 from funlib.segment.arrays import replace_values
 from funlib.evaluate import rand_voi
-from funlib.evaluate import expected_run_length, get_skeleton_lengths
+from funlib.evaluate import \
+    expected_run_length, \
+    get_skeleton_lengths, \
+    split_graph
 from pymongo import MongoClient
 from mask_skeletons import roi as calyx_mask_roi
 import daisy
+import glob
 import json
 import logging
-import numpy as np
 import multiprocessing as mp
+import networkx
+import numpy as np
+import os
 import sys
 import time
-import os
-import glob
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +43,7 @@ class EvaluateAnnotations():
             roi_shape,
             thresholds_minmax,
             thresholds_step,
+            compute_mincut_metric=False,
             **kwargs):
 
         self.experiment = experiment
@@ -60,6 +65,7 @@ class EvaluateAnnotations():
         self.roi = daisy.Roi(roi_offset, roi_shape)
         self.thresholds_minmax = thresholds_minmax
         self.thresholds_step = thresholds_step
+        self.compute_mincut_metric = compute_mincut_metric
 
         self.site_fragment_lut_directory = os.path.join(
             self.fragments_file,
@@ -68,7 +74,6 @@ class EvaluateAnnotations():
             self.fragments_file,
             self.fragments_dataset,
             mode='r')
-        self.roi = self.fragments.roi
 
     def store_lut_in_block(self, block):
 
@@ -126,6 +131,7 @@ class EvaluateAnnotations():
         ])
         assert self.site_component_ids.min() >= 0
         self.site_component_ids = self.site_component_ids.astype(np.uint64)
+        self.number_of_components = np.unique(self.site_component_ids).size
 
         # create a mask that limits sites to synaptic sites
         logger.info("Creating synaptic sites mask...")
@@ -298,13 +304,14 @@ class EvaluateAnnotations():
         # get the segment ID for each site
         logger.info("Mapping sites to segments...")
         start = time.time()
+        site_mask = np.isin(fragment_segment_lut[0], self.site_fragment_ids)
         site_segment_ids = replace_values(
             self.site_fragment_ids,
-            fragment_segment_lut[0],
-            fragment_segment_lut[1])
+            fragment_segment_lut[0][site_mask],
+            fragment_segment_lut[1][site_mask])
         logger.info("%.3fs", time.time() - start)
 
-        return site_segment_ids
+        return site_segment_ids, fragment_segment_lut
 
     def compute_expected_run_length(self, site_segment_ids):
 
@@ -346,93 +353,222 @@ class EvaluateAnnotations():
 
     def compute_splits_merges_needed(
             self,
+            fragment_segment_lut,
+            site_segment_ids,
             split_stats,
-            merge_stats):
+            merge_stats,
+            threshold):
 
-        splits_needed = 0
-        for merge in merge_stats:
-            splits_needed += self.compute_splits_needed(
-                merge['seg_id'],
-                merge['comp_ids'])
+        total_splits_needed = 0
+        total_additional_merges_needed = 0
+        total_unsplittable_fragments = []
 
-        merges_needed = 0
+        logger.info("Computing min-cut metric for each merging segment...")
+
+        for i, merge in enumerate(merge_stats):
+
+            logger.info("Processing merge %d/%d...", i + 1, len(merge_stats))
+            (
+                splits_needed,
+                additional_merges_needed,
+                unsplittable_fragments) = self.mincut_metric(
+                    fragment_segment_lut,
+                    site_segment_ids,
+                    merge['seg_id'],
+                    merge['comp_ids'],
+                    threshold)
+            total_splits_needed += splits_needed
+            total_additional_merges_needed += additional_merges_needed
+            total_unsplittable_fragments += unsplittable_fragments
+
+        total_merges_needed = 0
         for split in split_stats:
-            merges_needed += len(split['seg_ids']) - 1
+            total_merges_needed += len(split['seg_ids']) - 1
+        total_merges_needed += total_additional_merges_needed
 
-        return splits_needed, merges_needed
+        return (
+            total_splits_needed,
+            total_merges_needed,
+            total_unsplittable_fragments)
 
-    def compute_splits_needed(
+    def mincut_metric(
             self,
+            fragment_segment_lut,
+            site_segment_ids,
             segment_id,
-            component_ids):
+            component_ids,
+            threshold):
 
-        # for now
-        return len(component_ids) - 1
+        # get RAG for segment ID
+        rag = self.get_segment_rag(segment_id, fragment_segment_lut, threshold)
 
-        # # get RAG for segment ID
-        # rag = get_segment_rag(segment_id, fragment_segment_lut)
+        logger.info("Preparing RAG for split_graph call")
+        start = time.time()
 
-        # # replace merge_score with weight
-        # for e, data in rag.edges(data=True):
-            # data['weight'] = 1.0 - data['merge_score']
+        # replace merge_score with weight
+        for _, _, data in rag.edges(data=True):
+            data['weight'] = 1.0 - data['merge_score']
 
-        # # find fragments for each component
-        # component_fragments = {
-            # component_id: []
-            # for component_id in component_ids
-        # }
-        # for skeleton_node, data in self.skeletons.nodes(data=True):
+        # find fragments for each component in segment_id
+        component_fragments = {}
 
-            # component_id = data['component_id']
+        # True for every site that maps to segment_id
+        segment_mask = site_segment_ids == segment_id
 
-            # # not one of the components that need to be split
-            # if component_id not in component_ids:
-                # continue
+        for component_id in component_ids:
 
-            # # TODO
-            # fragment_id = None
+            # limit following to sites that are part of component_id and
+            # segment_id
+            component_mask = self.site_component_ids == component_id
+            mask = np.logical_and(component_mask, segment_mask)
+            site_ids = self.site_ids[mask]
+            site_fragment_ids = self.site_fragment_ids[mask]
 
-            # # skeleton node not part of RAG
-            # if fragment_id not in rag.nodes():
-                # continue
+            component_fragments[component_id] = site_fragment_ids
 
-            # component_fragments[component_id].append(fragment_id)
+            for site_id, fragment_id in zip(site_ids, site_fragment_ids):
 
-        # components = list(component_fragments.values())
+                # For each fragment containing a site, we need a position for
+                # the split_graph call. We just take the position of the
+                # skeleton node that maps to it, if there are several, we take
+                # the last one.
+                site_data = self.skeletons.nodes[site_id]
+                fragment = rag.nodes[fragment_id]
+                fragment['z'] = site_data['z']
+                fragment['y'] = site_data['y']
+                fragment['x'] = site_data['x']
 
-        # # call split_graph
-        # num_splits_needed = split_graph(
-            # rag,
-            # components,
-            # position_attributes=['z', 'y', 'x'],
-            # weight_attribute='weight',
-            # split_attribute='split')
+                # Keep track of how many components share a fragment. If it is
+                # more than one, this fragment is unsplittable.
+                if 'component_ids' not in fragment:
+                    fragment['component_ids'] = set()
+                fragment['component_ids'].add(component_id)
 
-        # return num_splits_needed
+        # find all unsplittable fragments...
+        unsplittable_fragments = []
+        for fragment_id, data in rag.nodes(data=True):
+            if 'component_ids' in data and len(data['component_ids']) > 1:
+                unsplittable_fragments.append(fragment_id)
+        # ...and remove them from the component lists
+        for component_id in component_ids:
 
-    # def get_segment_rag(segment_id, fragment_segment_lut):
+            fragment_ids = component_fragments[component_id]
+            valid_mask = np.logical_not(
+                np.isin(
+                    fragment_ids,
+                    unsplittable_fragments))
+            valid_fragment_ids = fragment_ids[valid_mask]
+            if len(valid_fragment_ids) > 0:
+                component_fragments[component_id] = valid_fragment_ids
+            else:
+                del component_fragments[component_id]
 
-        # # get all fragments for the given segment
-        # fragment_ids = fragment_segment_lut[0][fragment_segment_lut[1]==segment_id]
+        logger.info(
+            "%d fragments are merging and can not be split",
+            len(unsplittable_fragments))
 
-        # # get the RAG containing all fragments
-        # nodes = [
-            # {'id': fragment_id, 'segment_id': segment_id}
-            # for fragment_id in fragment_ids
-        # ]
-        # edges = rag_provider.read_edges(roi, nodes=nodes)
+        if len(component_fragments) <= 1:
+            logger.info(
+                "after removing unsplittable fragments, there is nothing to "
+                "do anymore")
+            return 0, 0, unsplittable_fragments
 
-        # rag = networkx.Graph()
-        # rag.add_nodes_from(nodes)
-        # rag.add_edges_from(edges)
-        # rag.remove_nodes_from([
-            # n
-            # for n, data in rag.nodes(data=True)
-            # if 'segment_id' not in data])
+        # these are the fragments that need to be split
+        split_fragments = list(component_fragments.values())
 
-        # # TODO: add position attributes for site fragments
+        logger.info("Preparation took %.3fs", time.time() - start)
 
-        # return rag
+        logger.info(
+            "Splitting segment into %d components with sizes %s",
+            len(split_fragments), [len(c) for c in split_fragments])
+
+        logger.info("Calling split_graph...")
+        start = time.time()
+
+        # call split_graph
+        num_splits_needed = split_graph(
+            rag,
+            split_fragments,
+            position_attributes=['z', 'y', 'x'],
+            weight_attribute='weight',
+            split_attribute='split')
+
+        logger.info("split_graph took %.3fs", time.time() - start)
+
+        logger.info(
+            "%d splits needed for segment %d",
+            num_splits_needed,
+            segment_id)
+
+        # get number of additional merges needed after splitting the current
+        # segment
+        #
+        # this is the number of split labels per component minus 1
+        additional_merges_needed = 0
+        for component, fragments in component_fragments.items():
+            split_ids = np.unique([rag.node[f]['split'] for f in fragments])
+            additional_merges_needed += len(split_ids) - 1
+
+        logger.info(
+            "%d additional merges needed to join components again",
+            additional_merges_needed)
+
+        return (
+            num_splits_needed,
+            additional_merges_needed,
+            unsplittable_fragments)
+
+    def get_segment_rag(self, segment_id, fragment_segment_lut, threshold):
+
+        logger.info("Reading RAG for segment %d", segment_id)
+        start = time.time()
+
+        rag_provider = daisy.persistence.MongoDbGraphProvider(
+            self.edges_db_name,
+            self.annotations_db_host,
+            mode='r',
+            edges_collection=self.edges_collection,
+            position_attribute=['z', 'y', 'x'])
+
+        # get all fragments for the given segment
+        segment_mask = fragment_segment_lut[1] == segment_id
+        fragment_ids = fragment_segment_lut[0][segment_mask]
+
+        # get the RAG containing all fragments
+        nodes = [
+            {'id': fragment_id, 'segment_id': segment_id}
+            for fragment_id in fragment_ids
+        ]
+        edges = rag_provider.read_edges(self.roi, nodes=nodes)
+
+        logger.info("RAG contains %d nodes/%d edges", len(nodes), len(edges))
+
+        rag = networkx.Graph()
+        node_list = [
+            (n['id'], {'segment_id': n['segment_id']})
+            for n in nodes
+        ]
+        edge_list = [
+            (e['u'], e['v'], {'merge_score': e['merge_score']})
+            for e in edges
+            if e['merge_score'] <= threshold
+        ]
+        rag.add_nodes_from(node_list)
+        rag.add_edges_from(edge_list)
+        rag.remove_nodes_from([
+            n
+            for n, data in rag.nodes(data=True)
+            if 'segment_id' not in data])
+
+        logger.info(
+            "after filtering dangling node and not merged edges "
+            "RAG contains %d nodes/%d edges",
+            rag.number_of_nodes(),
+            rag.number_of_edges())
+
+        logger.info("Reading RAG took %.3fs", time.time() - start)
+
+        return rag
 
     def compute_rand_voi(
             self,
@@ -460,7 +596,8 @@ class EvaluateAnnotations():
         scores_db = scores_client[self.scores_db_name]
         scores_collection = scores_db['scores']
 
-        site_segment_ids = self.get_site_segment_ids(threshold)
+        site_segment_ids, fragment_segment_lut = \
+            self.get_site_segment_ids(threshold)
 
         number_of_segments = np.unique(site_segment_ids).size
 
@@ -470,12 +607,18 @@ class EvaluateAnnotations():
         number_of_split_skeletons = len(split_stats)
         number_of_merging_segments = len(merge_stats)
 
-        splits_needed, merges_needed = self.compute_splits_merges_needed(
-            split_stats,
-            merge_stats)
+        if self.compute_mincut_metric:
 
-        average_splits_needed = splits_needed/number_of_segments
-        average_merges_needed = merges_needed/number_of_split_skeletons
+            splits_needed, merges_needed, unsplittable_fragments = \
+                self.compute_splits_merges_needed(
+                    fragment_segment_lut,
+                    site_segment_ids,
+                    split_stats,
+                    merge_stats,
+                    threshold)
+
+            average_splits_needed = splits_needed/number_of_segments
+            average_merges_needed = merges_needed/self.number_of_components
 
         rand_voi_report = self.compute_rand_voi(
             self.site_component_ids,
@@ -495,10 +638,16 @@ class EvaluateAnnotations():
         report['number_of_segments'] = number_of_segments
         report['number_of_merging_segments'] = number_of_merging_segments
         report['number_of_split_skeletons'] = number_of_split_skeletons
-        report['total_splits_needed_to_fix_merges'] = splits_needed
-        report['average_splits_needed_to_fix_merges'] = average_splits_needed
-        report['total_merges_needed_to_fix_splits'] = merges_needed
-        report['average_merges_needed_to_fix_splits'] = average_merges_needed
+        if self.compute_mincut_metric:
+            report['total_splits_needed_to_fix_merges'] = splits_needed
+            report['average_splits_needed_to_fix_merges'] = average_splits_needed
+            report['total_merges_needed_to_fix_splits'] = merges_needed
+            report['average_merges_needed_to_fix_splits'] = average_merges_needed
+            report['number_of_unsplittable_fragments'] = \
+                len(unsplittable_fragments)
+            report['unsplittable_fragments'] = [
+                int(f) for f in unsplittable_fragments
+            ]
         report['merge_stats'] = merge_stats
         report['split_stats'] = split_stats
         report['threshold'] = threshold
