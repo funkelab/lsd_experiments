@@ -43,6 +43,7 @@ class EvaluateAnnotations():
             roi_shape,
             thresholds_minmax,
             thresholds_step,
+            run_type=None,
             compute_mincut_metric=False,
             **kwargs):
 
@@ -65,11 +66,20 @@ class EvaluateAnnotations():
         self.roi = daisy.Roi(roi_offset, roi_shape)
         self.thresholds_minmax = thresholds_minmax
         self.thresholds_step = thresholds_step
+        self.run_type = run_type
         self.compute_mincut_metric = compute_mincut_metric
 
         self.site_fragment_lut_directory = os.path.join(
             self.fragments_file,
             'luts/site_fragment')
+
+        if self.run_type:
+            logger.info("Run type set, evaluating on %s dataset", self.run_type)
+            self.site_fragment_lut_directory = os.path.join(
+                    self.site_fragment_lut_directory,
+                    self.run_type)
+            logger.info("Path to site fragment luts: %s", self.site_fragment_lut_directory)
+
         self.fragments = daisy.open_ds(
             self.fragments_file,
             self.fragments_dataset,
@@ -183,12 +193,12 @@ class EvaluateAnnotations():
             logger.info(
                 "site-fragment LUT already exists, skipping preparation")
 
-        logger.info("Reading site-fragment LUT...")
+        logger.info("Reading site-fragment LUTs from %s...", self.site_fragment_lut_directory)
         start = time.time()
         lut_files = glob.glob(
             os.path.join(
-                self.fragments_file,
-                'luts/site_fragment/*.npz'))
+                self.site_fragment_lut_directory,
+                '*.npz'))
         site_fragment_lut = np.concatenate(
             [
                 np.load(f)['site_fragment_lut']
@@ -222,6 +232,17 @@ class EvaluateAnnotations():
                 "IDs have been generated. I hope you know what you are doing!",
                 self.roi, calyx_mask_roi)
 
+        node_mask = 'calyx_neuropil_mask'
+        node_components = 'calyx_neuropil_components'
+
+        if self.run_type:
+            logger.info("Using mask and components for %s data", self.run_type)
+            node_mask = ''.join([node_mask, '_', self.run_type])
+            node_components = ''.join([node_components, '_', self.run_type])
+
+        logger.info("Reading mask from: %s", node_mask)
+        logger.info("Reading components from: %s", node_components)
+
         # get all skeletons that are masked in
         logger.info("Fetching all skeletons...")
         skeletons_provider = daisy.persistence.MongoDbGraphProvider(
@@ -234,8 +255,8 @@ class EvaluateAnnotations():
             endpoint_names=['source', 'target'],
             position_attribute=['z', 'y', 'x'],
             node_attribute_collections={
-                'calyx_neuropil_mask': ['masked'],
-                'calyx_neuropil_components': ['component_id'],
+                node_mask: ['masked'],
+                node_components: ['component_id'],
             })
 
         start = time.time()
@@ -291,11 +312,22 @@ class EvaluateAnnotations():
         # get fragment-segment LUT
         logger.info("Reading fragment-segment LUT...")
         start = time.time()
+
+        fragment_segment_lut_dir = os.path.join(
+                self.fragments_file,
+                'luts/fragment_segment')
+
+        if self.run_type:
+            logger.info("Using lookup tables for %s data", self.run_type)
+            fragment_segment_lut_dir = os.path.join(
+                    fragment_segment_lut_dir,
+                    self.run_type)
+
+        logger.info("Reading fragment segment luts from: %s", fragment_segment_lut_dir)
+
         fragment_segment_lut_file = os.path.join(
-            self.fragments_file,
-            'luts',
-            'fragment_segment',
-            'seg_%s_%d.npz' % (self.edges_collection, int(threshold*100)))
+                fragment_segment_lut_dir,
+                'seg_%s_%d.npz' % (self.edges_collection, int(threshold*100)))
         fragment_segment_lut = np.load(
             fragment_segment_lut_file)['fragment_segment_lut']
         assert fragment_segment_lut.dtype == np.uint64
@@ -533,6 +565,8 @@ class EvaluateAnnotations():
         # get all fragments for the given segment
         segment_mask = fragment_segment_lut[1] == segment_id
         fragment_ids = fragment_segment_lut[0][segment_mask]
+        print("Fragment ids: %s", fragment_ids)
+
 
         # get the RAG containing all fragments
         nodes = [
