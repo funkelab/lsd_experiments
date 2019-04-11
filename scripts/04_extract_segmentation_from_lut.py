@@ -13,7 +13,6 @@ logging.getLogger('daisy.datasets').setLevel(logging.DEBUG)
 def segment_in_block(
         block,
         fragments_file,
-        lut_filename,
         segmentation,
         fragments,
         lut):
@@ -43,6 +42,7 @@ def extract_segmentation(
         num_workers,
         roi_offset=None,
         roi_shape=None,
+        run_type=None,
         **kwargs):
 
     # open fragments
@@ -68,11 +68,19 @@ def extract_segmentation(
 
     lut_filename = 'seg_%s_%d' % (edges_collection, int(threshold*100))
 
-    lut = os.path.join(
+    lut_dir = os.path.join(
         fragments_file,
         'luts',
-        'fragment_segment',
-        lut_filename + '.npz')
+        'fragment_segment')
+
+    if run_type:
+        lut_dir = os.path.join(lut_dir, run_type)
+        logging.info("Run type set, using luts from %s data"%run_type)
+
+    lut = os.path.join(
+            lut_dir,
+            lut_filename + '.npz')
+
     assert os.path.exists(lut), "%s does not exist" % lut
 
     start = time.time()
@@ -89,7 +97,6 @@ def extract_segmentation(
         lambda b: segment_in_block(
             b,
             fragments_file,
-            lut_filename,
             segmentation,
             fragments,
             lut),
