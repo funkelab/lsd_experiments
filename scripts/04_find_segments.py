@@ -19,9 +19,8 @@ def find_segments(
         edges_collection,
         roi_offset,
         roi_shape,
-        thresholds_minmax=None,
-        thresholds_step=None,
-        threshold=None,
+        thresholds_minmax,
+        thresholds_step,
         run_type=None,
         **kwargs):
 
@@ -117,9 +116,14 @@ def find_segments(
 
     os.makedirs(out_dir, exist_ok=True)
 
-    if run_type == 'testing':
+    thresholds = list(np.arange(
+        thresholds_minmax[0],
+        thresholds_minmax[1],
+        thresholds_step))
 
-        start = time.time()
+    start = time.time()
+
+    for threshold in thresholds:
 
         get_connected_components(
                 nodes,
@@ -128,27 +132,6 @@ def find_segments(
                 threshold,
                 edges_collection,
                 out_dir)
-
-        print("Created and stored testing lookup table in %.3fs" % (time.time() - start))
-
-    else:
-
-        thresholds = list(np.arange(
-            thresholds_minmax[0],
-            thresholds_minmax[1],
-            thresholds_step))
-
-        start = time.time()
-
-        for threshold in thresholds:
-
-            get_connected_components(
-                    nodes,
-                    edges,
-                    scores,
-                    threshold,
-                    edges_collection,
-                    out_dir)
 
         print("Created and stored lookup tables in %.3fs" % (time.time() - start))
 
