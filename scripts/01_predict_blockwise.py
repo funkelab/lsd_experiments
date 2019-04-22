@@ -10,7 +10,7 @@ import datetime
 import pymongo
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('daisy.blocks').setLevel(logging.DEBUG)
+# logging.getLogger('daisy').setLevel(logging.DEBUG)
 
 def predict_blockwise(
         experiment,
@@ -20,7 +20,6 @@ def predict_blockwise(
         raw_dataset,
         out_file,
         file_name,
-        out_dataset,
         num_workers,
         db_host,
         db_name,
@@ -51,9 +50,17 @@ def predict_blockwise(
             Paths to the input autocontext datasets (affs or lsds). Can be None if not needed.
 
         out_file (``string``):
-        out_dataset (``string``):
 
-            Path to the output datset.
+            Path to directory where zarr should be stored
+
+        **Note:
+
+            out_dataset no longer needed as input, build out_dataset from config
+            outputs dictionary generated in mknet.py
+
+        file_name (``string``):
+
+            Name of output file
 
         block_size_in_chunks (``tuple`` of ``int``):
 
@@ -75,8 +82,6 @@ def predict_blockwise(
 
     setup = os.path.abspath(os.path.join(train_dir, setup))
 
-    print('Input file path: ', raw_file)
-    print('Output file path: ', out_file)
     # from here on, all values are in world units (unless explicitly mentioned)
 
     # get ROI of source
@@ -85,17 +90,13 @@ def predict_blockwise(
     except:
         raw_dataset = raw_dataset + '/s0'
         source = daisy.open_ds(raw_file, raw_dataset)
-    print("Source dataset has shape %s, ROI %s, voxel size %s"%(
-        source.shape, source.roi, source.voxel_size))
+    logging.info('Source dataset has shape %s, ROI %s, voxel size %s'%(source.shape, source.roi, source.voxel_size))
 
     # load config
     with open(os.path.join(setup, 'config.json')) as f:
-        print("Reading setup config from %s"%os.path.join(setup, 'config.json'))
+        logging.info('Reading setup config from %s'%os.path.join(setup, 'config.json'))
         net_config = json.load(f)
-
-    out_dims = net_config['out_dims']
-    out_dtype = net_config['out_dtype']
-    print('Number of dimensions is %i'%out_dims)
+    outputs = net_config['outputs']
 
     # get chunk size and context
     net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
@@ -106,39 +107,29 @@ def predict_blockwise(
     input_roi = source.roi.grow(context, context)
     output_roi = source.roi
 
-    print("Following sizes in world units:")
-    print("net input size  = %s"%(net_input_size,))
-    print("net output size = %s"%(net_output_size,))
-    print("context         = %s"%(context,))
-
     # create read and write ROI
     block_read_roi = daisy.Roi((0, 0, 0), net_input_size) - context
     block_write_roi = daisy.Roi((0, 0, 0), net_output_size)
 
-    print("Following ROIs in world units:")
-    print("Block read  ROI  = %s"%block_read_roi)
-    print("Block write ROI  = %s"%block_write_roi)
-    print("Total input  ROI  = %s"%input_roi)
-    print("Total output ROI  = %s"%output_roi)
+    logging.info('Preparing output dataset...')
 
-    logging.info('Preparing output dataset')
-    print("Preparing output dataset...")
+    for output_name, val in outputs.items():
+        out_dims = val['out_dims']
+        out_dtype = val['out_dtype']
+        out_dataset = 'volumes/%s'%output_name
 
-    ds = daisy.prepare_ds(
-        out_file,
-        out_dataset,
-        output_roi,
-        source.voxel_size,
-        out_dtype,
-        write_roi=block_write_roi,
-        num_channels=out_dims,
-        # temporary fix until
-        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
-        # (we want gzip to be the default)
-        compressor={'id': 'gzip', 'level':5}
-        )
+        ds = daisy.prepare_ds(
+            out_file,
+            out_dataset,
+            output_roi,
+            source.voxel_size,
+            out_dtype,
+            write_roi=block_write_roi,
+            num_channels=out_dims,
+            compressor={'id': 'gzip', 'level':5}
+            )
 
-    print("Starting block-wise processing...")
+    logging.info('Starting block-wise processing...')
 
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
@@ -201,7 +192,7 @@ def predict_worker(
             raw_file = spec['container']
 
     worker_config = {
-        'queue': 'gpu_tesla',
+        'queue': 'slowpoke',
         'num_cpus': 2,
         'num_cache_workers': 5,
         'singularity': 'funkey/lsd:v0.8'
@@ -241,7 +232,7 @@ def predict_worker(
     with open(config_file, 'w') as f:
         json.dump(config, f)
 
-    print("Running block with config %s..."%config_file)
+    logging.info('Running block with config %s...'%config_file)
 
     command = [
         'run_lsf',
@@ -263,19 +254,14 @@ def predict_worker(
 
     logging.info('Predict worker finished')
 
-
-    # # if things went well, remove temporary files
+    # if things went well, remove temporary files
     # os.remove(config_file)
     # os.remove(log_out)
     # os.remove(log_err)
 
 def check_block(blocks_predicted, block):
 
-    print("Checking if block %s is complete..."%block.write_roi)
-
     done = blocks_predicted.count({'block_id': block.block_id}) >= 1
-
-    print("Block %s is %s" % (block, "done" if done else "NOT done"))
 
     return done
 
@@ -293,5 +279,5 @@ if __name__ == "__main__":
     end = time.time()
 
     seconds = end - start
-    print('Total time to predict: %f seconds' % seconds)
+    logging.info('Total time to predict: %f seconds' % seconds)
 
