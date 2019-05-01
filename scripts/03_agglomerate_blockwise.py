@@ -10,7 +10,8 @@ import pymongo
 import psutil
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+# logging.getLogger('daisy.persistence.mongodb_graph_provider').setLevel(logging.DEBUG)
 
 def agglomerate(
         experiment,
@@ -124,7 +125,7 @@ def start_worker(config_file, network_dir, queue):
 
     daisy.call([
         'run_lsf',
-        '-c', '8',
+        '-c', '1',
         '-g', '0',
         '-q', queue,
         '-b',
@@ -186,7 +187,7 @@ def agglomerate_worker(
         mode='r+',
         directed=False,
         edges_collection='edges_' + merge_function,
-        position_attribute=['center_z, center_y, center_x'])
+        position_attribute=['center_z', 'center_y', 'center_x'])
     logging.info("RAG DB opened")
 
     # open block done DB
@@ -200,15 +201,15 @@ def agglomerate_worker(
 
     client = daisy.Client()
 
-    num_blocks = 0
+    # num_blocks = 0
 
-    process = psutil.Process(os.getpid())
+    # process = psutil.Process(os.getpid())
 
     while True:
 
         block = client.acquire_block()
 
-        num_blocks += 1
+        #num_blocks += 1
 
         if not block:
             return
@@ -223,7 +224,7 @@ def agglomerate_worker(
                 merge_function=waterz_merge_function,
                 threshold=1.0)
 
-        logging.info("Process %d blocks consume current memory usage %d", num_blocks, process.memory_info().rss)
+        #logging.info("Process %d consumes %d bytes", num_blocks, process.memory_info().rss)
 
         document = {
             'num_cpus': 5,
