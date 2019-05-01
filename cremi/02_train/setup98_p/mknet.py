@@ -63,6 +63,8 @@ def create_network(input_shape, name):
             'output_shape': output_shape,
             'summary': summary.name
         }
+        config['outputs'] = {'affs': {"out_dims": 3, "out_dtype": "uint8"}}
+
         with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
@@ -74,11 +76,3 @@ if __name__ == "__main__":
     create_network((84, 268, 268), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
 
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-    config.update({
-        'out_dims': 3,
-        'out_dtype': 'uint8'
-    })
-    with open('config.json', 'w') as f:
-        json.dump(config, f)
