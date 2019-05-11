@@ -23,6 +23,7 @@ def predict_blockwise(
         num_workers,
         db_host,
         db_name,
+        queue,
         auto_file=None,
         auto_dataset=None):
 
@@ -70,6 +71,11 @@ def predict_blockwise(
         num_workers (``int``):
 
             How many blocks to run in parallel.
+
+        queue (``string``):
+
+            Name of queue to run inference on (i.e slowpoke, gpu_rtx, gpu_any,
+            gpu_tesla, gpu_tesla_large)
     '''
 
     experiment_dir = '../' + experiment
@@ -102,6 +108,7 @@ def predict_blockwise(
     net_input_size = daisy.Coordinate(net_config['input_shape'])*source.voxel_size
     net_output_size = daisy.Coordinate(net_config['output_shape'])*source.voxel_size
     context = (net_input_size - net_output_size)/2
+    print('CONTEXT: ', context)
 
     # get total input and output ROIs
     input_roi = source.roi.grow(context, context)
@@ -158,7 +165,8 @@ def predict_blockwise(
             out_file,
             out_dataset,
             db_host,
-            db_name),
+            db_name,
+            queue),
         check_function=lambda b: check_block(
             blocks_predicted,
             b),
@@ -181,7 +189,8 @@ def predict_worker(
         out_file,
         out_dataset,
         db_host,
-        db_name):
+        db_name,
+        queue):
 
     setup_dir = os.path.join('..', experiment, '02_train', setup)
     predict_script = os.path.abspath(os.path.join(setup_dir, 'predict.py'))
@@ -192,7 +201,7 @@ def predict_worker(
             raw_file = spec['container']
 
     worker_config = {
-        'queue': 'slowpoke',
+        'queue': queue,
         'num_cpus': 2,
         'num_cache_workers': 5,
         'singularity': 'funkey/lsd:v0.8'
