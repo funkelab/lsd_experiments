@@ -91,7 +91,7 @@ def predict(
                 net_config['raw']: raw
             },
             outputs={
-                net_config['embedding']: lsds,
+                net_config['lsds']: lsds,
                 net_config['affs']: affs
             },
             graph=os.path.join(setup_dir, 'config.meta')
