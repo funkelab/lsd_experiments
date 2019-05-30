@@ -103,20 +103,26 @@ def aggregateConfigs(configs):
         config['setup'] = network_config['setup']
         config['iteration'] = network_config['iteration']
 
-    # if "AgglomerateTask" in configs:
-        # config = configs["AgglomerateTask"]
-        # if 'affs_file' not in config:
-            # config['affs_file'] = input_config['output_file']
-        # config['fragments_file'] = input_config['output_file']
-        # config['db_name'] = input_config['db_name']
-        # config['db_host'] = input_config['db_host']
-        # config['log_dir'] = input_config['log_dir']
+    if "AgglomerateTask" in configs:
+        config = configs["AgglomerateTask"]
+        if 'affs_file' not in config:
+            config['affs_file'] = input_config['out_file']
+        if 'fragments_file' not in config:
+            config['fragments_file'] = input_config['out_file']
+        config['db_name'] = input_config['db_name']
+        config['db_host'] = input_config['db_host']
+        config['experiment'] = input_config['experiment']
+        config['setup'] = network_config['setup']
+        config['iteration'] = network_config['iteration']
 
-    # if "SegmentationTask" in configs:
-        # config = configs["SegmentationTask"]
-        # config['fragments_file'] = input_config['output_file']
-        # config['out_file'] = input_config['output_file']
-        # config['db_name'] = input_config['db_name']
-        # config['db_host'] = input_config['db_host']
-        # config['log_dir'] = input_config['log_dir']
+    if "SegmentationTask" in configs:
+        config = configs["SegmentationTask"]
+        if 'fragments_file' not in config:
+            config['fragments_file'] = input_config['out_file']
+        config['out_file'] = input_config['out_file']
+        config['db_name'] = input_config['db_name']
+        config['db_host'] = input_config['db_host']
+        config['experiment'] = input_config['experiment']
+        config['setup'] = network_config['setup']
+        config['iteration'] = network_config['iteration']
 
