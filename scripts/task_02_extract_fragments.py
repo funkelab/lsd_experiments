@@ -14,6 +14,7 @@ from task_01_predict_blockwise import PredictTask
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+# logging.getLogger('daisy').setLevel(logging.DEBUG)
 
 class ExtractFragmentsTask(daisy.Task):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
@@ -85,7 +86,6 @@ class ExtractFragmentsTask(daisy.Task):
             daisy.Roi((0, 0, 0), self.block_size),
             compressor={'id': 'zlib', 'level':5}
             )
-
 
         client = pymongo.MongoClient(self.db_host)
         db = client[self.db_name]
@@ -166,7 +166,7 @@ class ExtractFragmentsTask(daisy.Task):
             '-q', self.queue,
             # '-b',
             '-s', 'funkey/lsd:v0.8',
-            'python', 'extract_fragments_worker.py', config_file],
+            'python', 'workers/extract_fragments_worker.py', config_file],
             log_out=log_out,
             log_err=log_err)
 
