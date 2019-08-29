@@ -9,13 +9,16 @@ def create_network(input_shape, name):
     raw = tf.placeholder(tf.float32, shape=input_shape)
     raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-    unet = mala.networks.unet(raw_batched, 12, 6, [[2,2,2],[2,2,2],[3,3,3]])
+    unet, _, _  = mala.networks.unet(
+            raw_batched,
+            12,
+            6,
+            [[2,2,2],[2,2,2],[3,3,3]])
 
-    embedding_batched = mala.networks.conv_pass(
+    embedding_batched, _ = mala.networks.conv_pass(
         unet,
-        kernel_size=1,
+        kernel_sizes=[1],
         num_fmaps=10,
-        num_repetitions=1,
         activation='sigmoid')
 
     output_shape_batched = embedding_batched.get_shape().as_list()
@@ -52,11 +55,19 @@ def create_network(input_shape, name):
         'optimizer': optimizer.name,
         'input_shape': input_shape,
         'output_shape': output_shape}
-    with open(name + '_config.json', 'w') as f:
+    with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    # TODO: find largest test size
-    # create_network((196, 196, 196), 'test_net')
+    create_network((352, 352, 352), 'config')
+
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+    config.update({
+        'out_dims': 10,
+        'out_dtype': 'uint8'
+    })
+    with open('config.json', 'w') as f:
+        json.dump(config, f)
