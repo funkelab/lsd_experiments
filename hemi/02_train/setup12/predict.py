@@ -85,6 +85,7 @@ def predict(
 
     pipeline += Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            max_shared_memory=(2*1024*1024*1024),
             inputs={
                 net_config['raw']: raw
             },

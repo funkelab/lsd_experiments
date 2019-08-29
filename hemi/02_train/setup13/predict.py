@@ -61,12 +61,10 @@ def predict(
         **kwargs):
 
     raw = ArrayKey('RAW')
-    lsds = ArrayKey('LSDS')
     affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
-    chunk_request.add(lsds, output_size)
     chunk_request.add(affs, output_size)
 
     pipeline = ZarrSource(
@@ -87,35 +85,32 @@ def predict(
 
     pipeline += Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            graph=os.path.join(setup_dir, 'config.meta'),
             max_shared_memory=(2*1024*1024*1024),
             inputs={
                 net_config['raw']: raw
             },
             outputs={
-                net_config['lsds']: lsds,
                 net_config['affs']: affs
-            },
-            graph=os.path.join(setup_dir, 'config.meta')
+            }
         )
 
     pipeline += IntensityScaleShift(affs, 255, 0)
-    pipeline += IntensityScaleShift(lsds, 255, 0)
 
     pipeline += ZarrWrite(
             dataset_names={
-                lsds: 'volumes/lsds',
-                affs: 'volumes/affs'
+                affs: out_dataset,
             },
             output_filename=out_file
         )
+
     pipeline += PrintProfilingStats(every=10)
 
     pipeline += DaisyRequestBlocks(
             chunk_request,
             roi_map={
                 raw: 'read_roi',
-                affs: 'write_roi',
-                lsds: 'write_roi'
+                affs: 'write_roi'
             },
             num_workers=worker_config['num_cache_workers'],
             block_done_callback=lambda b, s, d: block_done_callback(

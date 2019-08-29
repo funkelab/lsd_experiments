@@ -100,7 +100,7 @@ def train_until(max_iteration):
             os.path.join(data_dir, sample),
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids',
+                labels: 'volumes/labels/cell_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {

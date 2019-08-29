@@ -1,15 +1,14 @@
 from __future__ import print_function
-import os
-import sys
-import logging
 from gunpowder import *
 from gunpowder.tensorflow import *
-from mala.gunpowder import AddLocalShapeDescriptor
+import json
+import logging
 import malis
 import math
-import json
-import tensorflow as tf
 import numpy as np
+import os
+import sys
+import tensorflow as tf
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,47 +24,7 @@ samples = [
     'pb-groundtruth-with-context-x8472-y2892-z9372.zarr'
 ]
 
-setup_dir = os.path.dirname(os.path.realpath(__file__))
-
-with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
-    config = json.load(f)
-
-experiment_dir = os.path.join(setup_dir, '..', '..')
-auto_setup_dir = os.path.realpath(os.path.join(
-    experiment_dir,
-    '02_train',
-    config['lsds_setup']))
-
-neighborhood = np.array([
-
-    [-1, 0, 0],
-    [0, -1, 0],
-    [0, 0, -1],
-
-    [-3, 0, 0],
-    [0, -3, 0],
-    [0, 0, -3],
-
-    [-5, 0, 0],
-    [0, -5, 0],
-    [0, 0, -5],
-
-    [-13, 0, 0],
-    [0, -13, 0],
-    [0, 0, -13]
-])
-
-
-class EnsureUInt8(BatchFilter):
-
-    def __init__(self, array):
-        self.array = array
-
-    def prepare(self, request):
-        pass
-
-    def process(self, batch, request):
-        batch[self.array].data = (batch[self.array].data*255.0).astype(np.uint8)
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
 def train_until(max_iteration):
 
@@ -76,34 +35,26 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_auto_net.json', 'r') as f:
-        sd_config = json.load(f)
     with open('train_net.json', 'r') as f:
-        context_config = json.load(f)
+        config = json.load(f)
 
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    artifacts = ArrayKey('ARTIFACTS')
-    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
-    pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('PREDICTED_AFFS')
-    gt_affs = ArrayKey('GT_AFFINITIES')
+    gt_affs = ArrayKey('GT_AFFS')
     gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
-    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
+    gt_affs_scale = ArrayKey('GT_AFFS_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
     voxel_size = Coordinate((8, 8, 8))
-    sd_input_size = Coordinate(sd_config['input_shape'])*voxel_size
-    context_input_size = Coordinate(context_config['input_shape'])*voxel_size
-    pretrained_lsd_size = Coordinate(context_config['input_shape'])*voxel_size
-    output_size = Coordinate(context_config['output_shape'])*voxel_size
+    input_size = Coordinate(config['input_shape'])*voxel_size
+    output_size = Coordinate(config['output_shape'])*voxel_size
 
     request = BatchRequest()
-    request.add(raw, sd_input_size)
+    request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(pretrained_lsd, pretrained_lsd_size)
     request.add(gt_affs, output_size)
     request.add(gt_affs_mask, output_size)
     request.add(gt_affs_scale, output_size)
@@ -118,7 +69,7 @@ def train_until(max_iteration):
             os.path.join(data_dir, sample),
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/cell_ids',
+                labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
@@ -135,18 +86,19 @@ def train_until(max_iteration):
         for sample in samples
     )
 
+
     train_pipeline = (
         data_sources +
         RandomProvider() +
         ElasticAugment(
-            control_point_spacing=[40,40,40],
-            jitter_sigma=[0,0,0],
+            control_point_spacing=[40, 40, 40],
+            jitter_sigma=[0, 0, 0],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0,
             prob_shift=0,
             max_misalign=0,
             subsample=8) +
-        SimpleAugment(transpose_only=[1, 2]) +
+        SimpleAugment() +
         ElasticAugment(
             control_point_spacing=[40,40,40],
             jitter_sigma=[2,2,2],
@@ -171,49 +123,36 @@ def train_until(max_iteration):
         PreCache(
             cache_size=40,
             num_workers=10) +
-        Predict(
-            checkpoint=os.path.join(
-                auto_setup_dir,
-                'train_net_checkpoint_%d'%config['lsds_iteration']),
-            graph='train_auto_net.meta',
-            inputs={
-                sd_config['raw']: raw
-            },
-            outputs={
-                sd_config['embedding']: pretrained_lsd
-            }) +
-        EnsureUInt8(pretrained_lsd) +
-        Normalize(pretrained_lsd) +
         Train(
             'train_net',
-            optimizer=context_config['optimizer'],
-            loss=context_config['loss'],
+            optimizer=config['optimizer'],
+            loss=config['loss'],
             inputs={
-                context_config['raw']: raw,
-                context_config['pretrained_lsd']: pretrained_lsd,
-                context_config['gt_affs']: gt_affs,
-                context_config['loss_weights_affs']: gt_affs_scale,
+                config['raw']: raw,
+                config['gt_affs']: gt_affs,
+                config['loss_weights_affs']: gt_affs_scale,
             },
             outputs={
-                context_config['affs']: affs
+                config['affs']: affs
             },
             gradients={
-                context_config['affs']: affs_gradient
+                config['affs']: affs_gradient
             },
-            summary=context_config['summary'],
+            summary=config['summary'],
             log_dir='log',
-            save_every=5000) +
+            save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                pretrained_lsd: 'volumes/labels/pretrained_lsd',
-                gt_affs: 'volumes/labels/gt_affinities',
-                affs: 'volumes/labels/pred_affinities',
+                gt_affs: 'volumes/gt_affinities',
+                affs: 'volumes/pred_affinities',
+                labels_mask: 'volumes/labels/mask',
                 affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
-                labels: np.uint64
+                labels: np.uint64,
+                gt_affs: np.float32
             },
             every=1000,
             output_filename='batch_{iteration}.hdf',
@@ -228,5 +167,6 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
+
     iteration = int(sys.argv[1])
     train_until(iteration)

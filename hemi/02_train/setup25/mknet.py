@@ -6,7 +6,7 @@ def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup02'):
+    with tf.variable_scope('setup25'):
 
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
@@ -15,16 +15,7 @@ def create_network(input_shape, name):
             raw_batched,
             12,
             6,
-            [[2,2,2],[2,2,2],[3,3,3]],
-            num_fmaps_out=14)
-
-        lsds_batched, _ = mala.networks.conv_pass(
-            unet,
-            kernel_sizes=[1],
-            num_fmaps=10,
-            activation='sigmoid',
-            name='lsds')
-        lsds = tf.squeeze(lsds_batched, axis=0)
+            [[2,2,2],[2,2,2],[3,3,3]])
 
         affs_batched, _ = mala.networks.conv_pass(
             unet,
@@ -36,29 +27,17 @@ def create_network(input_shape, name):
 
         output_shape = tuple(affs.get_shape().as_list()[1:])
 
-        gt_lsds = tf.placeholder(tf.float32, shape=(10,) + output_shape)
-        loss_weights_lsds = tf.placeholder(tf.float32, shape=(10,) + output_shape)
-
         gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
         loss_weights_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
-
-        loss_lsds = tf.losses.mean_squared_error(
-            gt_lsds,
-            lsds,
-            loss_weights_lsds)
 
         loss_affs = tf.losses.mean_squared_error(
             gt_affs,
             affs,
             loss_weights_affs)
 
-        loss = loss_lsds + loss_affs
+        loss = loss_affs
 
-        summary = tf.summary.merge([
-            tf.summary.scalar('loss', loss),
-            tf.summary.scalar('loss_lsds', loss_lsds),
-            tf.summary.scalar('loss_affs', loss_affs)
-        ])
+        summary = tf.summary.scalar('setup25_eucl_loss', loss)
 
         opt = tf.train.AdamOptimizer(
             learning_rate=0.5e-4,
@@ -74,9 +53,6 @@ def create_network(input_shape, name):
 
         config = {
             'raw': raw.name,
-            'lsds': lsds.name,
-            'gt_lsds': gt_lsds.name,
-            'loss_weights_lsds': loss_weights_lsds.name,
             'affs': affs.name,
             'gt_affs': gt_affs.name,
             'loss_weights_affs': loss_weights_affs.name,
@@ -87,16 +63,7 @@ def create_network(input_shape, name):
             'summary': summary.name
         }
 
-        config['outputs'] = {
-                'affs':
-                {"out_dims": 3,
-                    "out_dtype": "uint8"
-                    },
-                'lsds':
-                {"out_dims": 10,
-                    "out_dtype": "uint8"
-                    }
-                }
+        config['outputs'] = {'affs': {"out_dims": 3, "out_dtype": "uint8"}}
 
         with open(name + '.json', 'w') as f:
             json.dump(config, f)
@@ -105,5 +72,5 @@ def create_network(input_shape, name):
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    # create_network((352, 352, 352), 'config')
+    create_network((352, 352, 352), 'config')
 

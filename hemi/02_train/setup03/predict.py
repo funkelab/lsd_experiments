@@ -18,7 +18,7 @@ input_shape = Coordinate(net_config['input_shape'])
 output_shape = Coordinate(net_config['output_shape'])
 
 # nm
-voxel_size = Coordinate((8, 8, 8))
+voxel_size = Coordinate((12, 12, 12))
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
@@ -85,6 +85,7 @@ def predict(
 
     pipeline += Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            max_shared_memory=(2*1024*1024*1024),
             inputs={
                 net_config['raw']: raw
             },

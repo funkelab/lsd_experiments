@@ -33,7 +33,7 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net_config.json', 'r') as f:
+    with open('train_net.json', 'r') as f:
         config = json.load(f)
 
     raw = ArrayKey('RAW')
