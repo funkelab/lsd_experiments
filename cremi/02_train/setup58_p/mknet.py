@@ -71,8 +71,10 @@ def create_network(input_shape, name):
 
 if __name__ == "__main__":
 
-    z=18
-    xy=162
+    # z=18
+    # xy=162
+    z=0
+    xy=0
 
     create_network((84, 268, 268), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')

@@ -105,23 +105,24 @@ def create_affs(input_shape, name):
         with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
-def create_config(input_shape, output_shape, num_dims, name):
+def create_config(input_shape, output_shape, name):
 
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims,
-        'out_dtype': 'uint8',
         'lsds_setup': 'setup177_p',
         'lsds_iteration': 400000
         }
+
+    config['outputs'] = {'affs': {"out_dims": 12, "out_dtype": "uint8"}}
+
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
-    z=12
-    xy=108
+    z=21
+    xy=189
 
     train_input_shape = (120, 484, 484)
     train_intermediate_shape = (84, 268, 268)
@@ -131,8 +132,8 @@ if __name__ == "__main__":
     create_affs(train_intermediate_shape, 'train_net')
 
     test_input_shape = (96+z, 484+xy, 484+xy)
-    test_output_shape = (72, 380, 380)
+    test_output_shape = (60+z, 272+xy, 272+xy)
 
     create_affs(test_input_shape, 'test_net')
 
-    create_config(test_input_shape, test_output_shape, 12, 'config')
+    create_config(test_input_shape, test_output_shape, 'config')

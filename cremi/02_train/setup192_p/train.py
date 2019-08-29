@@ -13,17 +13,22 @@ import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/glia_mask/'
+# data_dir = '../../01_data/glia_mask/'
+# artifacts_dir = '../../01_data/training/'
+
+# samples = [
+    # 'sample_0',
+    # 'sample_1',
+    # 'sample_2',
+    # 'sample_A',
+    # 'sample_B',
+    # 'sample_C'
+# ]
+
+data_dir = '/groups/funke/funkelab/sheridana/lsd_experiments/vnc1/01_data/'
 artifacts_dir = '../../01_data/training/'
 
-samples = [
-    'sample_0',
-    'sample_1',
-    'sample_2',
-    'sample_A',
-    'sample_B',
-    'sample_C'
-]
+samples = ['cutout_1_sparse.hdf']
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -114,8 +119,8 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        ZarrSource(
-            os.path.join(data_dir, sample + '.n5'),
+        Hdf5Source(
+            os.path.join(data_dir, sample),
             datasets = {
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
@@ -130,8 +135,7 @@ def train_until(max_iteration):
         Normalize(raw) +
         Pad(labels, context) +
         Pad(labels_mask, context) +
-        RandomLocation() +
-        Reject(mask=labels_mask)
+        RandomLocation(mask=labels_mask)
         for sample in samples
     )
 
