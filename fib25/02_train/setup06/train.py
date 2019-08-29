@@ -20,7 +20,24 @@ samples = [
     'tstvol-520-2.zarr',
 ]
 
-neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+neighborhood = np.array([
+
+    [-1, 0, 0],
+    [0, -1, 0],
+    [0, 0, -1],
+
+    [-3, 0, 0],
+    [0, -3, 0],
+    [0, 0, -3],
+
+    [-5, 0, 0],
+    [0, -5, 0],
+    [0, 0, -5],
+
+    [-13, 0, 0],
+    [0, -13, 0],
+    [0, 0, -13]
+])
 
 # needs to match order of samples (small to large)
 probabilities = [0.05, 0.05, 0.45, 0.45]
@@ -52,9 +69,15 @@ def train_until(max_iteration):
     input_size = Coordinate(input_shape) * voxel_size
     output_size = Coordinate(output_shape) * voxel_size
 
+    #Assume worst case (rotation augmentation by 45 degrees) and pad
+    #by half the length of the diagonal of the network output size
+
     p = int(round(np.sqrt(np.sum([i*i for i in output_shape]))/2))
 
-    labels_padding = Coordinate((p,p,p))
+    #Ensure that our padding is the closest multiple of our resolution
+
+    labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,p,p], list(voxel_size))])
+
     print('Labels padding:', labels_padding)
 
     request = BatchRequest()
@@ -91,39 +114,41 @@ def train_until(max_iteration):
         for sample in samples
     )
 
-    train_pipeline = data_sources
-    train_pipeline += RandomProvider(probabilities=probabilities)
-    train_pipeline += ElasticAugment(
+
+    train_pipeline = (
+        data_sources +
+        RandomProvider(probabilities=probabilities) +
+        ElasticAugment(
             control_point_spacing=[40, 40, 40],
             jitter_sigma=[0, 0, 0],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0,
             prob_shift=0,
             max_misalign=0,
-            subsample=8)
-    train_pipeline += SimpleAugment()
-    train_pipeline += ElasticAugment(
+            subsample=8) +
+        SimpleAugment() +
+        ElasticAugment(
             control_point_spacing=[40,40,40],
             jitter_sigma=[2,2,2],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0.01,
             prob_shift=0.01,
             max_misalign=1,
-            subsample=8)
-    train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1)
-    train_pipeline += GrowBoundary(labels, labels_mask, steps=1)
-    train_pipeline += AddAffinities(
+            subsample=8) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
+        GrowBoundary(labels, labels_mask, steps=1) +
+        AddAffinities(
             neighborhood,
             labels=labels,
-            affinities=gt_affs)
-    train_pipeline += BalanceLabels(
+            affinities=gt_affs) +
+        BalanceLabels(
             gt_affs,
-            gt_affs_scale)
-    train_pipeline += IntensityScaleShift(raw, 2,-1)
-    train_pipeline += PreCache(
+            gt_affs_scale) +
+        IntensityScaleShift(raw, 2,-1) +
+        PreCache(
             cache_size=40,
-            num_workers=10)
-    train_pipeline += Train(
+            num_workers=10) +
+        Train(
             'train_net',
             optimizer=config['optimizer'],
             loss=config['loss'],
@@ -140,9 +165,9 @@ def train_until(max_iteration):
             },
             summary=config['summary'],
             log_dir='log',
-            save_every=10000)
-    train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
-    train_pipeline += Snapshot({
+            save_every=10000) +
+        IntensityScaleShift(raw, 0.5, 0.5) +
+        Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
                 gt_affs: 'volumes/gt_affinities',
@@ -156,9 +181,9 @@ def train_until(max_iteration):
             },
             every=1000,
             output_filename='batch_{iteration}.hdf',
-            additional_request=snapshot_request)
-    train_pipeline += PrintProfilingStats(every=10)
-
+            additional_request=snapshot_request) +
+        PrintProfilingStats(every=10)
+    )
 
     print("Starting training...")
     with build(train_pipeline) as b:

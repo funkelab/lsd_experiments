@@ -6,7 +6,7 @@ def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup01'):
+    with tf.variable_scope('setup06'):
 
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
@@ -20,15 +20,15 @@ def create_network(input_shape, name):
         affs_batched, _ = mala.networks.conv_pass(
             unet,
             kernel_sizes=[1],
-            num_fmaps=3,
+            num_fmaps=12,
             activation='sigmoid',
             name='affs')
         affs = tf.squeeze(affs_batched, axis=0)
 
         output_shape = tuple(affs.get_shape().as_list()[1:])
 
-        gt_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
-        loss_weights_affs = tf.placeholder(tf.float32, shape=(3,) + output_shape)
+        gt_affs = tf.placeholder(tf.float32, shape=(12,) + output_shape)
+        loss_weights_affs = tf.placeholder(tf.float32, shape=(12,) + output_shape)
 
         loss_affs = tf.losses.mean_squared_error(
             gt_affs,
@@ -37,7 +37,7 @@ def create_network(input_shape, name):
 
         loss = loss_affs
 
-        summary = tf.summary.scalar('setup01_eucl_loss', loss)
+        summary = tf.summary.scalar('setup06_eucl_loss', loss)
 
         opt = tf.train.AdamOptimizer(
             learning_rate=0.5e-4,
@@ -63,7 +63,7 @@ def create_network(input_shape, name):
             'summary': summary.name
         }
 
-        config['outputs'] = {'affs': {"out_dims": 3, "out_dtype": "uint8"}}
+        config['outputs'] = {'affs': {"out_dims": 12, "out_dtype": "uint8"}}
 
         with open(name + '.json', 'w') as f:
             json.dump(config, f)

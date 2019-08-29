@@ -55,9 +55,9 @@ def create_network(input_shape, name):
         loss = loss_lsds + loss_affs
 
         summary = tf.summary.merge([
-            tf.summary.scalar('loss', loss),
-            tf.summary.scalar('loss_lsds', loss_lsds),
-            tf.summary.scalar('loss_affs', loss_affs)
+            tf.summary.scalar('setup02_eucl_loss', loss),
+            tf.summary.scalar('setup02_eucl_loss_lsds', loss_lsds),
+            tf.summary.scalar('setup02_eucl_loss_affs', loss_affs)
         ])
 
         opt = tf.train.AdamOptimizer(
@@ -86,20 +86,24 @@ def create_network(input_shape, name):
             'output_shape': output_shape,
             'summary': summary.name
         }
-        with open(name + '_config.json', 'w') as f:
+
+        config['outputs'] = {
+                'affs':
+                {"out_dims": 3,
+                    "out_dtype": "uint8"
+                    },
+                'lsds':
+                {"out_dims": 10,
+                    "out_dtype": "uint8"
+                    }
+                }
+
+        with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
 
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((352, 352, 352), 'test_net')
+    create_network((268, 268, 268), 'config')
 
-    with open('test_net_config.json', 'r') as f:
-        config = json.load(f)
-    config.update({
-        'out_dims': 3,
-        'out_dtype': 'uint8'
-    })
-    with open('config.json', 'w') as f:
-        json.dump(config, f)

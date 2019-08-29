@@ -1,15 +1,15 @@
 from __future__ import print_function
+import os
+import sys
+import logging
 from gunpowder import *
 from gunpowder.tensorflow import *
 from mala.gunpowder import AddLocalShapeDescriptor
-import json
-import logging
 import malis
 import math
-import numpy as np
-import os
-import sys
+import json
 import tensorflow as tf
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,31 +21,32 @@ samples = [
     'tstvol-520-2.zarr',
 ]
 
-neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
-
 # needs to match order of samples (small to large)
-
 probabilities = [0.05, 0.05, 0.45, 0.45]
 
-class UnmaskBackground(BatchFilter):
+setup_dir = os.path.dirname(os.path.realpath(__file__))
 
-    ''' 
+with open(os.path.join(setup_dir, 'config.json'), 'r') as f:
+    config = json.load(f)
 
-    We want to mask out losses for LSDs at the boundary
-    between neurons while not simultaneously masking out
-    losses for LSDs at raw=0. Therefore we should add
-    (1 - background mask) to gt_lsds_scale after we add
-    the LSDs in the AddLocalShapeDescriptor node.
+experiment_dir = os.path.join(setup_dir, '..', '..')
+auto_setup_dir = os.path.realpath(os.path.join(
+    experiment_dir,
+    '02_train',
+    config['lsds_setup']))
 
-    '''
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
-    def __init__(self, target_mask, background_mask):
-        self.target_mask = target_mask
-        self.background_mask = background_mask
+class EnsureUInt8(BatchFilter):
+
+    def __init__(self, array):
+        self.array = array
+
+    def prepare(self, request):
+        pass
+
     def process(self, batch, request):
-        batch[self.target_mask].data = np.logical_or(
-                batch[self.target_mask].data,
-                np.logical_not(batch[self.background_mask].data))
+        batch[self.array].data = (batch[self.array].data*255.0).astype(np.uint8)
 
 def train_until(max_iteration):
 
@@ -56,50 +57,50 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
+    with open('train_auto_net.json', 'r') as f:
+        sd_config = json.load(f)
     with open('train_net.json', 'r') as f:
-        config = json.load(f)
+        context_config = json.load(f)
 
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    lsds = ArrayKey('PREDICTED_LSDS')
-    gt_lsds = ArrayKey('GT_LSDS')
-    gt_lsds_scale = ArrayKey('GT_LSDS_SCALE')
-    lsds_gradient = ArrayKey('LSDS_GRADIENT')
+    artifacts = ArrayKey('ARTIFACTS')
+    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
+    pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('PREDICTED_AFFS')
-    gt_affs = ArrayKey('GT_AFFS')
-    gt_affs_scale = ArrayKey('GT_AFFS_SCALE')
+    gt_affs = ArrayKey('GT_AFFINITIES')
+    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    input_shape = config['input_shape']
-    output_shape = config['output_shape']
+    sd_input_shape = sd_config['input_shape']
+
+    context_input_shape = context_config['input_shape']
+    context_output_shape = context_config['output_shape']
 
     voxel_size = Coordinate((8, 8, 8))
-    input_size = Coordinate(input_shape)*voxel_size
-    output_size = Coordinate(output_shape)*voxel_size
+    sd_input_size = Coordinate(sd_input_shape)*voxel_size
+    pretrained_lsd_size = Coordinate(context_input_shape)*voxel_size
+    output_size = Coordinate(context_output_shape)*voxel_size
 
-    #Assume worst case (rotation augmentation by 45 degrees) and pad
+    #Assume worst case (rotation augmentation by 45 degrees and pad
     #by half the length of the diagonal of the network output size
 
-    p = int(round(np.sqrt(np.sum([i*i for i in output_shape]))/2))
+    p = int(round(np.sqrt(np.sum([i*i for i in context_output_shape]))/2))
 
     #Ensure that our padding is the closest multiple of our resolution
 
     labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,p,p], list(voxel_size))])
 
-    print('Labels padding:', labels_padding)
-
     request = BatchRequest()
-    request.add(raw, input_size)
+    request.add(raw, sd_input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(gt_lsds, output_size)
-    request.add(gt_lsds_scale, output_size)
+    request.add(pretrained_lsd, pretrained_lsd_size)
     request.add(gt_affs, output_size)
     request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
-        lsds: request[gt_lsds],
         affs: request[gt_affs],
         affs_gradient: request[gt_affs]
     })
@@ -126,13 +127,12 @@ def train_until(max_iteration):
         for sample in samples
     )
 
-
     train_pipeline = (
         data_sources +
         RandomProvider(probabilities=probabilities) +
         ElasticAugment(
-            control_point_spacing=[40, 40, 40],
-            jitter_sigma=[0, 0, 0],
+            control_point_spacing=[40,40,40],
+            jitter_sigma=[0,0,0],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0,
             prob_shift=0,
@@ -149,13 +149,6 @@ def train_until(max_iteration):
             subsample=8) +
         IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1) +
         GrowBoundary(labels, labels_mask, steps=1) +
-        AddLocalShapeDescriptor(
-            labels,
-            gt_lsds,
-            mask=gt_lsds_scale,
-            sigma=80,
-            downsample=2) +
-        UnmaskBackground(gt_lsds_scale, labels_mask) +
         AddAffinities(
             neighborhood,
             labels=labels,
@@ -166,42 +159,50 @@ def train_until(max_iteration):
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
-            num_workers=20) +
-        Train(
-            'train_net',
-            optimizer=config['optimizer'],
-            loss=config['loss'],
+            num_workers=10) +
+        Predict(
+            checkpoint=os.path.join(
+                auto_setup_dir,
+                'train_net_checkpoint_%d'%config['lsds_iteration']),
+            graph='train_auto_net.meta',
             inputs={
-                config['raw']: raw,
-                config['gt_lsds']: gt_lsds,
-                config['loss_weights_lsds']: gt_lsds_scale,
-                config['gt_affs']: gt_affs,
-                config['loss_weights_affs']: gt_affs_scale,
+                sd_config['raw']: raw
             },
             outputs={
-                config['lsds']: lsds,
-                config['affs']: affs
+                sd_config['embedding']: pretrained_lsd
+            }) +
+        EnsureUInt8(pretrained_lsd) +
+        Normalize(pretrained_lsd) +
+        Train(
+            'train_net',
+            optimizer=context_config['optimizer'],
+            loss=context_config['loss'],
+            inputs={
+                context_config['raw']: raw,
+                context_config['pretrained_lsd']: pretrained_lsd,
+                context_config['gt_affs']: gt_affs,
+                context_config['loss_weights_affs']: gt_affs_scale,
+            },
+            outputs={
+                context_config['affs']: affs
             },
             gradients={
-                config['affs']: affs_gradient
+                context_config['affs']: affs_gradient
             },
-            summary=config['summary'],
+            summary=context_config['summary'],
             log_dir='log',
             save_every=10000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt_lsds: 'volumes/gt_lsds',
-                lsds: 'volumes/pred_lsds',
-                gt_affs: 'volumes/gt_affinities',
-                affs: 'volumes/pred_affinities',
-                labels_mask: 'volumes/labels/mask',
+                pretrained_lsd: 'volumes/labels/pretrained_lsd',
+                gt_affs: 'volumes/labels/gt_affinities',
+                affs: 'volumes/labels/pred_affinities',
                 affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
-                labels: np.uint64,
-                gt_affs: np.float32
+                labels: np.uint64
             },
             every=1000,
             output_filename='batch_{iteration}.hdf',
@@ -216,6 +217,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-
     iteration = int(sys.argv[1])
     train_until(iteration)

@@ -25,6 +25,32 @@ neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 # needs to match order of samples (small to large)
 probabilities = [0.05, 0.05, 0.45, 0.45]
 
+phase_switch = 10000
+
+with open('train_net.json', 'r') as f:
+        config = json.load(f)
+
+def add_malis_loss(graph):
+    affs = graph.get_tensor_by_name(config['affs'])
+    gt_affs = graph.get_tensor_by_name(config['gt_affs'])
+    gt_seg = tf.placeholder(tf.int64, shape=(92, 92, 92), name='gt_seg')
+
+    loss = malis.malis_loss_op(affs, 
+        gt_affs, 
+        gt_seg,
+        neighborhood)
+    malis_summary = tf.summary.scalar('setup07_malis_loss', loss)
+    opt = tf.train.AdamOptimizer(
+        learning_rate=0.5e-4,
+        beta1=0.95,
+        beta2=0.999,
+        epsilon=1e-8,
+        name='malis_optimizer')
+
+    optimizer = opt.minimize(loss)
+
+    return (loss, optimizer)
+
 def train_until(max_iteration):
 
     if tf.train.latest_checkpoint('.'):
@@ -34,8 +60,11 @@ def train_until(max_iteration):
     if trained_until >= max_iteration:
         return
 
-    with open('train_net.json', 'r') as f:
-        config = json.load(f)
+    if trained_until < phase_switch and max_iteration > phase_switch:
+        train_until(phase_switch)
+
+    phase = 'euclid' if max_iteration <= phase_switch else 'malis'
+    print("Training in phase %s until %i"%(phase, max_iteration))
 
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
@@ -52,9 +81,15 @@ def train_until(max_iteration):
     input_size = Coordinate(input_shape) * voxel_size
     output_size = Coordinate(output_shape) * voxel_size
 
+    #Assume worst case (rotation augmentation by 45 degrees) and pad
+    #by half the length of the diagonal of the network output size
+
     p = int(round(np.sqrt(np.sum([i*i for i in output_shape]))/2))
 
-    labels_padding = Coordinate((p,p,p))
+    #Ensure that our padding is the closest multiple of our resolution
+
+    labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,p,p], list(voxel_size))])
+
     print('Labels padding:', labels_padding)
 
     request = BatchRequest()
@@ -62,7 +97,9 @@ def train_until(max_iteration):
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
     request.add(gt_affs, output_size)
-    request.add(gt_affs_scale, output_size)
+
+    if phase == 'euclid':
+        request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
         affs: request[gt_affs],
@@ -92,7 +129,9 @@ def train_until(max_iteration):
     )
 
     train_pipeline = data_sources
+
     train_pipeline += RandomProvider(probabilities=probabilities)
+
     train_pipeline += ElasticAugment(
             control_point_spacing=[40, 40, 40],
             jitter_sigma=[0, 0, 0],
@@ -101,7 +140,9 @@ def train_until(max_iteration):
             prob_shift=0,
             max_misalign=0,
             subsample=8)
+
     train_pipeline += SimpleAugment()
+
     train_pipeline += ElasticAugment(
             control_point_spacing=[40,40,40],
             jitter_sigma=[2,2,2],
@@ -110,38 +151,65 @@ def train_until(max_iteration):
             prob_shift=0.01,
             max_misalign=1,
             subsample=8)
+
     train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1)
+
     train_pipeline += GrowBoundary(labels, labels_mask, steps=1)
+
+    if phase == 'malis':
+        train_pipeline += RenumberConnectedComponents(
+                labels=labels
+                )
+
     train_pipeline += AddAffinities(
             neighborhood,
             labels=labels,
             affinities=gt_affs)
-    train_pipeline += BalanceLabels(
-            gt_affs,
-            gt_affs_scale)
-    train_pipeline += IntensityScaleShift(raw, 2,-1)
+
+    if phase == 'euclid':
+        train_pipeline += BalanceLabels(
+                gt_affs,
+                gt_affs_scale)
+
+    train_pipeline += IntensityScaleShift(raw, 2,-1) 
+
     train_pipeline += PreCache(
             cache_size=40,
             num_workers=10)
+
+    train_inputs = {
+            config['raw']: raw,
+            config['gt_affs']: gt_affs
+    }
+
+    if phase == 'euclid':
+        train_loss = config['loss']
+        train_optimizer = config['optimizer']
+        train_summary = config['summary']
+        train_inputs[config['loss_weights_affs']] = gt_affs_scale
+    else:
+        train_loss = None
+        train_optimizer = add_malis_loss
+        train_inputs['gt_seg:0'] = labels
+        train_summary = 'setup07_malis_loss:0'
+
     train_pipeline += Train(
             'train_net',
-            optimizer=config['optimizer'],
-            loss=config['loss'],
-            inputs={
-                config['raw']: raw,
-                config['gt_affs']: gt_affs,
-                config['loss_weights_affs']: gt_affs_scale,
-            },
+            optimizer=train_optimizer,
+            loss=train_loss,
+            inputs=train_inputs,
             outputs={
                 config['affs']: affs
             },
             gradients={
                 config['affs']: affs_gradient
             },
-            summary=config['summary'],
+            summary=train_summary,
             log_dir='log',
             save_every=10000)
+
     train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
+
     train_pipeline += Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
@@ -157,8 +225,8 @@ def train_until(max_iteration):
             every=1000,
             output_filename='batch_{iteration}.hdf',
             additional_request=snapshot_request)
-    train_pipeline += PrintProfilingStats(every=10)
 
+    train_pipeline += PrintProfilingStats(every=10)
 
     print("Starting training...")
     with build(train_pipeline) as b:

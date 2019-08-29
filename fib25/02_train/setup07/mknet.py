@@ -6,7 +6,7 @@ def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup01'):
+    with tf.variable_scope('setup07'):
 
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
@@ -37,7 +37,7 @@ def create_network(input_shape, name):
 
         loss = loss_affs
 
-        summary = tf.summary.scalar('setup01_eucl_loss', loss)
+        summary = tf.summary.scalar('setup07_eucl_loss', loss)
 
         opt = tf.train.AdamOptimizer(
             learning_rate=0.5e-4,
@@ -72,5 +72,5 @@ def create_network(input_shape, name):
 if __name__ == "__main__":
 
     create_network((196, 196, 196), 'train_net')
-    create_network((268, 268, 268), 'config')
+    create_network((352, 352, 352), 'config')
 
