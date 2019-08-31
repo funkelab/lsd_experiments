@@ -1,44 +1,37 @@
 from __future__ import print_function
+import sys
 from gunpowder import *
 from gunpowder.tensorflow import *
-import json
-import logging
 import malis
-import math
-import numpy as np
+import glob
 import os
-import sys
+import math
+import json
 import tensorflow as tf
+import numpy as np
+import logging
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/training'
-samples = [
-    'trvol-250-1.zarr',
-    'trvol-250-2.zarr',
-    'tstvol-520-1.zarr',
-    'tstvol-520-2.zarr',
-]
+data_dir = '../../01_data'
+
+samples = glob.glob(os.path.join(data_dir, '*.zarr'))
 
 neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
-# needs to match order of samples (small to large)
-
-probabilities = [0.05, 0.05, 0.45, 0.45]
-
-phase_switch = 10000
+phase_switch = 500000
 
 with open('train_net.json', 'r') as f:
-        config = json.load(f)
+    config = json.load(f)
 
 def add_malis_loss(graph):
     affs = graph.get_tensor_by_name(config['affs'])
     gt_affs = graph.get_tensor_by_name(config['gt_affs'])
-    gt_seg = tf.placeholder(tf.int64, shape=(92, 92, 92), name='gt_seg')
-    gt_affs_mask = tf.placeholder(tf.int64, shape=(3, 92, 92, 92), name='gt_affs_mask')
+    gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
+    gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
 
-    loss = malis.malis_loss_op(affs, 
-        gt_affs, 
+    loss = malis.malis_loss_op(affs,
+        gt_affs,
         gt_seg,
         neighborhood,
         gt_affs_mask)
@@ -73,47 +66,36 @@ def train_until(max_iteration):
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
     affs = ArrayKey('PREDICTED_AFFS')
-    gt_affs = ArrayKey('GT_AFFS')
+    gt = ArrayKey('GT_AFFINITIES')
     gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
-    gt_affs_scale = ArrayKey('GT_AFFS_SCALE')
+    gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    input_shape = config['input_shape']
-    output_shape = config['output_shape']
+    voxel_size = Coordinate((20, 9, 9))
+    input_size = Coordinate(config['input_shape'])*voxel_size
+    output_size = Coordinate(config['output_shape'])*voxel_size
 
-    voxel_size = Coordinate((8, 8, 8))
-    input_size = Coordinate(input_shape)*voxel_size
-    output_size = Coordinate(output_shape)*voxel_size
-
-    #Assume worst case (rotation augmentation by 45 degrees) and pad
-    #by half the length of the diagonal of the network output size
-
-    p = int(round(np.sqrt(np.sum([i*i for i in output_shape]))/2))
-
-    #Ensure that our padding is the closest multiple of our resolution
-
-    labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,p,p], list(voxel_size))])
-
-    print('Labels padding:', labels_padding)
+    p = int(round(np.sqrt(np.sum([i*i for i in config['output_shape']]))/2))
+    labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,]*3, list(voxel_size))])
 
     request = BatchRequest()
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(gt_affs, output_size)
+    request.add(gt, output_size)
     request.add(gt_affs_mask, output_size)
 
     if phase is 'euclid':
         request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
-        affs: request[gt_affs],
-        affs_gradient: request[gt_affs]
+        affs: request[gt],
+        affs_gradient: request[gt]
     })
 
     data_sources = tuple(
         ZarrSource(
-            os.path.join(data_dir, sample),
+            sample,
             datasets = {
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
@@ -126,75 +108,58 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(raw, None) +
-        Pad(labels, labels_padding) +
+        Pad(labels, None) +
         Pad(labels_mask, labels_padding) +
         RandomLocation(min_masked=0.5, mask=labels_mask)
         for sample in samples
     )
 
     train_pipeline = data_sources
-
-    train_pipeline += RandomProvider(probabilities=probabilities)
-
+    train_pipeline += RandomProvider()
     train_pipeline += ElasticAugment(
-            control_point_spacing=[40, 40, 40],
-            jitter_sigma=[0, 0, 0],
+            control_point_spacing=[4,4,10],
+            jitter_sigma=[0,2,2],
             rotation_interval=[0,math.pi/2.0],
-            prob_slip=0,
-            prob_shift=0,
-            max_misalign=0,
+            prob_slip=0.05,
+            prob_shift=0.05,
+            max_misalign=10,
             subsample=8)
-
-    train_pipeline += SimpleAugment()
-
-    train_pipeline += ElasticAugment(
-            control_point_spacing=[40,40,40],
-            jitter_sigma=[2,2,2],
-            rotation_interval=[0,math.pi/2.0],
-            prob_slip=0.01,
-            prob_shift=0.01,
-            max_misalign=1,
-            subsample=8)
-
-    train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1)
-
-    train_pipeline += GrowBoundary(labels, labels_mask, steps=1)
+    train_pipeline += SimpleAugment(transpose_only=[1, 2])
+    train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
+    train_pipeline += GrowBoundary(labels, labels_mask, steps=1, only_xy=True)
 
     if phase == 'malis':
         train_pipeline += RenumberConnectedComponents(
-                labels=labels
-                )
+            labels=labels
+            )
 
     train_pipeline += AddAffinities(
             neighborhood,
             labels=labels,
-            affinities=gt_affs,
             labels_mask=labels_mask,
+            affinities=gt,
             affinities_mask=gt_affs_mask)
 
     if phase == 'euclid':
         train_pipeline += BalanceLabels(
-                gt_affs,
-                gt_affs_scale,
-                gt_affs_mask)
+            gt,
+            gt_affs_scale,
+            gt_affs_mask)
 
-    train_pipeline += IntensityScaleShift(raw, 2,-1) 
-
+    train_pipeline += IntensityScaleShift(raw, 2,-1)
     train_pipeline += PreCache(
             cache_size=40,
             num_workers=10)
 
     train_inputs = {
-            config['raw']: raw,
-            config['gt_affs']: gt_affs
+        config['raw']: raw,
+        config['gt_affs']: gt,
     }
-
     if phase == 'euclid':
         train_loss = config['loss']
         train_optimizer = config['optimizer']
         train_summary = config['summary']
-        train_inputs[config['loss_weights_affs']] = gt_affs_scale
+        train_inputs[config['affs_loss_weights']] = gt_affs_scale
     else:
         train_loss = None
         train_optimizer = add_malis_loss
@@ -218,18 +183,17 @@ def train_until(max_iteration):
             save_every=10000)
 
     train_pipeline += IntensityScaleShift(raw, 0.5, 0.5)
-
     train_pipeline += Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt_affs: 'volumes/gt_affinities',
+                gt: 'volumes/gt_affinities',
                 affs: 'volumes/pred_affinities',
+                gt_affs_mask: 'volumes/labels/gt_affs_mask',
                 labels_mask: 'volumes/labels/mask',
                 affs_gradient: 'volumes/affs_gradient'
             },
             dataset_dtypes={
-                labels: np.uint64,
-                gt_affs: np.float32
+                labels: np.uint64
             },
             every=1000,
             output_filename='batch_{iteration}.hdf',
@@ -244,6 +208,5 @@ def train_until(max_iteration):
     print("Training finished")
 
 if __name__ == "__main__":
-
     iteration = int(sys.argv[1])
     train_until(iteration)
