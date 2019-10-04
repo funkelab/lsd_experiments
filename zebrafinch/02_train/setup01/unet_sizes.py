@@ -52,7 +52,7 @@ def input_output(input_size, downsampling_values, valid_values):
 
 
 if __name__ == '__main__':
-    downsampling_values = [3, 3, 3]
+    downsampling_values = [2,2,2]
     valid_values = []
     min_x = 0
     

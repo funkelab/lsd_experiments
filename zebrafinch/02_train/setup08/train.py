@@ -2,6 +2,7 @@ from __future__ import print_function
 import sys
 from gunpowder import *
 from gunpowder.tensorflow import *
+from mala.gunpowder import AddLocalShapeDescriptor
 import malis
 import glob
 import os
@@ -30,12 +31,11 @@ def add_malis_loss(graph):
     gt_seg = tf.placeholder(tf.int64, shape=(48, 56, 56), name='gt_seg')
     gt_affs_mask = tf.placeholder(tf.int64, shape=(3,48,56,56), name='gt_affs_mask')
 
-    loss = malis.malis_loss_op(affs,
+    malis_loss = malis.malis_loss_op(affs,
         gt_affs,
         gt_seg,
         neighborhood,
         gt_affs_mask)
-    malis_summary = tf.summary.scalar('setup07_malis_loss', loss)
     opt = tf.train.AdamOptimizer(
         learning_rate=0.5e-4,
         beta1=0.95,
@@ -43,7 +43,20 @@ def add_malis_loss(graph):
         epsilon=1e-8,
         name='malis_optimizer')
 
+    lsd_loss = graph.get_tensor_by_name(config['loss_embedding'])
+    loss = malis_loss + lsd_loss
+
     optimizer = opt.minimize(loss)
+
+    malis_summary = tf.summary.scalar('setup08_malis_loss', loss)
+    lsd_summary = tf.summary.scalar('setup08_lsd_loss', loss)
+    comb_summary = tf.summary.scalar('setup08_comb_loss', loss)
+
+    summary = tf.summary.merge([
+        malis_summary,
+        lsd_summary,
+        comb_summary],
+        name='setup08_merged_loss')
 
     return (loss, optimizer)
 
@@ -65,8 +78,10 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
+    embedding = ArrayKey('PREDICTED_EMBEDDING')
     affs = ArrayKey('PREDICTED_AFFS')
-    gt = ArrayKey('GT_AFFINITIES')
+    gt_embedding = ArrayKey('GT_EMBEDDING')
+    gt_affs = ArrayKey('GT_AFFINITIES')
     gt_affs_mask = ArrayKey('GT_AFFINITIES_MASK')
     gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
@@ -82,15 +97,17 @@ def train_until(max_iteration):
     request.add(raw, input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
-    request.add(gt, output_size)
+    request.add(gt_embedding, output_size)
+    request.add(gt_affs, output_size)
     request.add(gt_affs_mask, output_size)
 
     if phase is 'euclid':
         request.add(gt_affs_scale, output_size)
 
     snapshot_request = BatchRequest({
-        affs: request[gt],
-        affs_gradient: request[gt]
+        embedding: request[gt_embedding],
+        affs: request[gt_affs],
+        affs_gradient: request[gt_affs]
     })
 
     data_sources = tuple(
@@ -128,6 +145,12 @@ def train_until(max_iteration):
     train_pipeline += IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True)
     train_pipeline += GrowBoundary(labels, labels_mask, steps=1, only_xy=True)
 
+    train_pipeline += AddLocalShapeDescriptor(
+            labels,
+            gt_embedding,
+            sigma=120,
+            downsample=2)
+
     if phase == 'malis':
         train_pipeline += RenumberConnectedComponents(
             labels=labels
@@ -137,12 +160,12 @@ def train_until(max_iteration):
             neighborhood,
             labels=labels,
             labels_mask=labels_mask,
-            affinities=gt,
+            affinities=gt_affs,
             affinities_mask=gt_affs_mask)
 
     if phase == 'euclid':
         train_pipeline += BalanceLabels(
-            gt,
+            gt_affs,
             gt_affs_scale,
             gt_affs_mask)
 
@@ -153,19 +176,21 @@ def train_until(max_iteration):
 
     train_inputs = {
         config['raw']: raw,
-        config['gt_affs']: gt,
+        config['gt_affs']: gt_affs,
+        config['gt_embedding']: gt_embedding,
+        config['loss_weights_embedding']: labels_mask
     }
     if phase == 'euclid':
         train_loss = config['loss']
         train_optimizer = config['optimizer']
         train_summary = config['summary']
-        train_inputs[config['affs_loss_weights']] = gt_affs_scale
+        train_inputs[config['loss_weights_affs']] = gt_affs_scale
     else:
         train_loss = None
         train_optimizer = add_malis_loss
         train_inputs['gt_seg:0'] = labels
         train_inputs['gt_affs_mask:0'] = gt_affs_mask
-        train_summary = 'setup07_malis_loss:0'
+        train_summary = 'setup08_merged_loss/setup08_merged_loss:0'
 
     train_pipeline += Train(
             'train_net',
@@ -173,7 +198,8 @@ def train_until(max_iteration):
             loss=train_loss,
             inputs=train_inputs,
             outputs={
-                config['affs']: affs
+                config['affs']: affs,
+                config['embedding']: embedding
             },
             gradients={
                 config['affs']: affs_gradient
@@ -186,7 +212,9 @@ def train_until(max_iteration):
     train_pipeline += Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
-                gt: 'volumes/gt_affinities',
+                gt_embedding: 'volumes/gt_lsds',
+                gt_affs: 'volumes/gt_affinities',
+                embedding: 'volumes/pred_embedding',
                 affs: 'volumes/pred_affinities',
                 gt_affs_mask: 'volumes/labels/gt_affs_mask',
                 labels_mask: 'volumes/labels/mask',

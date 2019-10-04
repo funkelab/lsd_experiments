@@ -8,19 +8,17 @@ from mala.gunpowder import AddLocalShapeDescriptor
 import malis
 import math
 import json
+import glob
 import tensorflow as tf
 import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/glia_mask/'
-artifacts_dir = '../../01_data/training/'
+data_dir = '../../01_data'
 
-samples = [
-    'sample_A',
-    'sample_B',
-    'sample_C'
-]
+samples = glob.glob(os.path.join(data_dir, '*.zarr'))
+
+neighborhood = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
 setup_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -32,25 +30,6 @@ auto_setup_dir = os.path.realpath(os.path.join(
     experiment_dir,
     '02_train',
     config['lsds_setup']))
-
-neighborhood = np.array([
-
-    [-1, 0, 0],
-    [0, -1, 0],
-    [0, 0, -1],
-
-    [-2, 0, 0],
-    [0, -3, 0],
-    [0, 0, -3],
-
-    [-3, 0, 0],
-    [0, -9, 0],
-    [0, 0, -9],
-
-    [-4, 0, 0],
-    [0, -27, 0],
-    [0, 0, -27]
-])
 
 class EnsureUInt8(BatchFilter):
 
@@ -80,8 +59,6 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    artifacts = ArrayKey('ARTIFACTS')
-    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
     pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('PREDICTED_AFFS')
     gt_affs = ArrayKey('GT_AFFINITIES')
@@ -89,12 +66,16 @@ def train_until(max_iteration):
     gt_affs_scale = ArrayKey('GT_AFFINITIES_SCALE')
     affs_gradient = ArrayKey('AFFS_GRADIENT')
 
-    voxel_size = Coordinate((40,4,4))
+    voxel_size = Coordinate((20,9,9))
     sd_input_size = Coordinate(sd_config['input_shape'])*voxel_size
     context_input_size = Coordinate(context_config['input_shape'])*voxel_size
     pretrained_lsd_size = Coordinate(context_config['input_shape'])*voxel_size
     output_size = Coordinate(context_config['output_shape'])*voxel_size
+
     context = output_size/2
+
+    p = int(round(np.sqrt(np.sum([i*i for i in config['output_shape']]))/2))
+    labels_padding = Coordinate([j * round(i/j) for i,j in zip([p,]*3, list(voxel_size))])
 
     request = BatchRequest()
     request.add(raw, sd_input_size)
@@ -112,10 +93,10 @@ def train_until(max_iteration):
 
     data_sources = tuple(
         ZarrSource(
-            os.path.join(data_dir, sample + '.n5'),
+            sample,
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids_noglia',
+                labels: 'volumes/labels/neuron_ids',
                 labels_mask: 'volumes/labels/mask',
             },
             array_specs = {
@@ -125,45 +106,17 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(labels, context) +
-        Pad(labels_mask, context) +
+        Pad(raw, None) +
         RandomLocation() +
         Reject(mask=labels_mask)
         for sample in samples
-    )
-
-    artifact_source = (
-        Hdf5Source(
-            os.path.join(artifacts_dir, 'sample_ABC_padded_20160501.defects.hdf'),
-            datasets = {
-                artifacts: 'defect_sections/raw',
-                artifacts_mask: 'defect_sections/mask',
-            },
-            array_specs = {
-                artifacts: ArraySpec(
-                    voxel_size=(40, 4, 4),
-                    interpolatable=True),
-                artifacts_mask: ArraySpec(
-                    voxel_size=(40, 4, 4),
-                    interpolatable=True),
-            }
-        ) +
-        RandomLocation(min_masked=0.05, mask=artifacts_mask) +
-        Normalize(artifacts) +
-        IntensityAugment(artifacts, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
-        ElasticAugment(
-            control_point_spacing=[4,40,40],
-            jitter_sigma=[0,2,2],
-            rotation_interval=[0,math.pi/2.0],
-            subsample=8) +
-        SimpleAugment(transpose_only=[1, 2])
     )
 
     train_pipeline = (
         data_sources +
         RandomProvider() +
         ElasticAugment(
-            control_point_spacing=[4,40,40],
+            control_point_spacing=[4,4,10],
             jitter_sigma=[0,2,2],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0.05,
@@ -183,16 +136,6 @@ def train_until(max_iteration):
             gt_affs,
             gt_affs_scale,
             gt_affs_mask) +
-        DefectAugment(
-            raw,
-            prob_missing=0.03,
-            prob_low_contrast=0.01,
-            prob_artifact=0.03,
-            artifact_source=artifact_source,
-            artifacts=artifacts,
-            artifacts_mask=artifacts_mask,
-            contrast_scale=0.5,
-            axis=0) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
@@ -227,7 +170,7 @@ def train_until(max_iteration):
             },
             summary=context_config['summary'],
             log_dir='log',
-            save_every=10000) +
+            save_every=1000) +
         IntensityScaleShift(raw, 0.5, 0.5) +
         Snapshot({
                 raw: 'volumes/raw',

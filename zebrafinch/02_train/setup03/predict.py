@@ -18,7 +18,7 @@ input_shape = Coordinate(net_config['input_shape'])
 output_shape = Coordinate(net_config['output_shape'])
 
 # nm
-voxel_size = Coordinate((40, 4, 4))
+voxel_size = Coordinate((20, 9, 9))
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
@@ -62,12 +62,10 @@ def predict(
 
     raw = ArrayKey('RAW')
     lsds = ArrayKey('LSDS')
-    affs = ArrayKey('AFFS')
 
     chunk_request = BatchRequest()
     chunk_request.add(raw, input_size)
     chunk_request.add(lsds, output_size)
-    chunk_request.add(affs, output_size)
 
     pipeline = ZarrSource(
             raw_file,
@@ -87,23 +85,21 @@ def predict(
 
     pipeline += Predict(
             os.path.join(setup_dir, 'train_net_checkpoint_%d'%iteration),
+            graph=os.path.join(setup_dir, 'config.meta'),
+            max_shared_memory=(2*1024*1024*1024),
             inputs={
                 net_config['raw']: raw
             },
             outputs={
-                net_config['embedding']: lsds,
-                net_config['affs']: affs
-            },
-            graph=os.path.join(setup_dir, 'config.meta')
+                net_config['embedding']: lsds
+            }
         )
 
-    pipeline += IntensityScaleShift(affs, 255, 0)
     pipeline += IntensityScaleShift(lsds, 255, 0)
 
     pipeline += ZarrWrite(
             dataset_names={
-                lsds: 'volumes/lsds',
-                affs: 'volumes/affs'
+                lsds: 'volumes/lsds'
             },
             output_filename=out_file
         )
@@ -113,7 +109,6 @@ def predict(
             chunk_request,
             roi_map={
                 raw: 'read_roi',
-                affs: 'write_roi',
                 lsds: 'write_roi'
             },
             num_workers=worker_config['num_cache_workers'],

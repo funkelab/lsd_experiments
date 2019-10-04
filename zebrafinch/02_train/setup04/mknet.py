@@ -7,7 +7,7 @@ def create_auto(input_shape, output_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup175_p'):
+    with tf.variable_scope('setup03'):
 
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
@@ -45,7 +45,7 @@ def create_affs(input_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup187_p'):
+    with tf.variable_scope('setup04'):
 
         pretrained_lsd = tf.placeholder(tf.float32, shape=(10,) + input_shape)
         pretrained_lsd_batched = tf.reshape(pretrained_lsd, (1, 10) + input_shape)
@@ -59,7 +59,7 @@ def create_affs(input_shape, name):
         affs_batched, _ = mala.networks.conv_pass(
             unet,
             kernel_sizes=[1],
-            num_fmaps=12,
+            num_fmaps=3,
             activation='sigmoid',
             name='affs')
 
@@ -76,7 +76,7 @@ def create_affs(input_shape, name):
             affs,
             loss_weights_affs)
 
-        summary = tf.summary.scalar('setup187_eucl_loss', loss)
+        summary = tf.summary.scalar('setup04_eucl_loss', loss)
 
         opt = tf.train.AdamOptimizer(
             learning_rate=0.5e-4,
@@ -105,23 +105,24 @@ def create_affs(input_shape, name):
         with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
-def create_config(input_shape, output_shape, num_dims, name):
+def create_config(input_shape, output_shape, name):
 
     config = {
         'input_shape': input_shape,
         'output_shape': output_shape,
-        'out_dims': num_dims,
-        'out_dtype': 'uint8',
-        'lsds_setup': 'setup175_p',
+        'lsds_setup': 'setup03',
         'lsds_iteration': 400000
         }
+
+    config['outputs'] = {'affs': {"out_dims": 3, "out_dtype": "uint8"}}
+
     with open(name + '.json', 'w') as f:
         json.dump(config, f)
 
 if __name__ == "__main__":
 
-    z=12
-    xy=108
+    z=18
+    xy=162
 
     train_input_shape = (120, 484, 484)
     train_intermediate_shape = (84, 268, 268)
@@ -131,8 +132,8 @@ if __name__ == "__main__":
     create_affs(train_intermediate_shape, 'train_net')
 
     test_input_shape = (96+z, 484+xy, 484+xy)
-    test_output_shape = (72, 380, 380)
+    test_output_shape = (78, 434, 434)
 
     create_affs(test_input_shape, 'test_net')
 
-    create_config(test_input_shape, test_output_shape, 12, 'config')
+    create_config(test_input_shape, test_output_shape, 'config')

@@ -80,8 +80,8 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
-        Pad(labels, None) +
-        Pad(labels_mask, labels_padding) +
+        Pad(labels, context) +
+        Pad(labels_mask, context) +
         RandomLocation(min_masked=0.5, mask=labels_mask)
         for sample in samples
     )

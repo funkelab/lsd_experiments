@@ -6,7 +6,7 @@ def create_network(input_shape, name):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup02'):
+    with tf.variable_scope('setup08'):
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
@@ -60,9 +60,9 @@ def create_network(input_shape, name):
         loss = loss_embedding + loss_affs
 
         summary = tf.summary.merge([
-            tf.summary.scalar('setup02_eucl_loss', loss),
-            tf.summary.scalar('setup02_eucl_loss_lsds', loss_embedding),
-            tf.summary.scalar('setup02_eucl_loss_affs', loss_affs)
+            tf.summary.scalar('setup08_eucl_loss', loss),
+            tf.summary.scalar('setup08_eucl_loss_lsds', loss_embedding),
+            tf.summary.scalar('setup08_eucl_loss_affs', loss_affs)
             ])
 
         opt = tf.train.AdamOptimizer(
@@ -86,6 +86,7 @@ def create_network(input_shape, name):
             'loss_weights_embedding': loss_weights.name,
             'loss_weights_affs': loss_weights_affs.name,
             'loss': loss.name,
+            'loss_embedding': loss_embedding.name,
             'optimizer': optimizer.name,
             'input_shape': input_shape,
             'output_shape': output_shape,
