@@ -1,4 +1,5 @@
 import json
+import hashlib
 import logging
 import lsd
 import numpy as np
@@ -7,7 +8,6 @@ import daisy
 import sys
 import time
 import pymongo
-import psutil
 
 logging.basicConfig(level=logging.INFO)
 # logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
@@ -101,7 +101,16 @@ def agglomerate(
         total_roi,
         read_roi,
         write_roi,
-        process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
+        process_function=lambda: start_worker(
+            affs_file,
+            affs_dataset,
+            fragments_file,
+            fragments_dataset,
+            db_host,
+            db_name,
+            queue,
+            merge_function,
+            network_dir),
         check_function=lambda b: check_block(
             blocks_agglomerated,
             b),
@@ -109,9 +118,21 @@ def agglomerate(
         read_write_conflict=False,
         fit='shrink')
 
-def start_worker(config_file, network_dir, queue):
+def start_worker(
+        affs_file,
+        affs_dataset,
+        fragments_file,
+        fragments_dataset,
+        db_host,
+        db_name,
+        queue,
+        merge_function,
+        network_dir,
+        **kwargs):
 
     worker_id = daisy.Context.from_env().worker_id
+
+    logging.info("worker %s started...", worker_id)
 
     output_dir = os.path.join('.agglomerate_blockwise', network_dir)
 
@@ -123,121 +144,46 @@ def start_worker(config_file, network_dir, queue):
     log_out = os.path.join(output_dir, 'agglomerate_blockwise_%d.out' %worker_id)
     log_err = os.path.join(output_dir, 'agglomerate_blockwise_%d.err' %worker_id)
 
+    config = {
+            'affs_file': affs_file,
+            'affs_dataset': affs_dataset,
+            'fragments_file': fragments_file,
+            'fragments_dataset': fragments_dataset,
+            'db_host': db_host,
+            'db_name': db_name,
+            'queue': queue,
+            'merge_function': merge_function
+        }
+
+    config_str = ''.join(['%s'%(v,) for v in config.values()])
+    config_hash = abs(int(hashlib.md5(config_str.encode()).hexdigest(), 16))
+
+    config_file = os.path.join(output_dir, '%d.config'%config_hash)
+
+    with open(config_file, 'w') as f:
+        json.dump(config, f)
+
+    logging.info('Running block with config %s...'%config_file)
+
+    base_dir = '.'
+    worker = 'workers/agglomerate_worker.py'
+
     daisy.call([
         'run_lsf',
         '-c', '1',
         '-g', '0',
         '-q', queue,
         '-b',
-        '-s', 'funkey/lsd:v0.8',
-        'python', './03_agglomerate_blockwise.py', sys.argv[1],
-        '--run_worker'],
+        # '-s', 'funkey/lsd:v0.8',
+        'python', os.path.join(base_dir, worker), config_file],
         log_out=log_out,
         log_err=log_err)
 
 def check_block(blocks_agglomerated, block):
 
-    # print("Checking if block %s is complete..."%block.write_roi)
-
     done = blocks_agglomerated.count({'block_id': block.block_id}) >= 1
 
-    # print("Block %s is %s" % (block, "done" if done else "NOT done"))
-
     return done
-
-def agglomerate_worker(
-        affs_file,
-        affs_dataset,
-        fragments_file,
-        fragments_dataset,
-        db_host,
-        db_name,
-        queue,
-        merge_function,
-        **kwargs):
-
-    '''
-    Args:
-
-    '''
-
-    waterz_merge_function = {
-        'hist_quant_10': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 10, ScoreValue, 256, false>>',
-        'hist_quant_10_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 10, ScoreValue, 256, true>>',
-        'hist_quant_25': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 25, ScoreValue, 256, false>>',
-        'hist_quant_25_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 25, ScoreValue, 256, true>>',
-        'hist_quant_50': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256, false>>',
-        'hist_quant_50_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 50, ScoreValue, 256, true>>',
-        'hist_quant_75': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 75, ScoreValue, 256, false>>',
-        'hist_quant_75_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 75, ScoreValue, 256, true>>',
-        'hist_quant_90': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 90, ScoreValue, 256, false>>',
-        'hist_quant_90_initmax': 'OneMinus<HistogramQuantileAffinity<RegionGraphType, 90, ScoreValue, 256, true>>',
-        'mean': 'OneMinus<MeanAffinity<RegionGraphType, ScoreValue>>',
-    }[merge_function]
-
-    logging.info("Reading affs from %s"%affs_file)
-    affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
-    fragments = daisy.open_ds(fragments_file, fragments_dataset, mode='r+')
-
-    # open RAG DB
-    logging.info("Opening RAG DB...")
-    rag_provider = daisy.persistence.MongoDbGraphProvider(
-        db_name,
-        host=db_host,
-        mode='r+',
-        directed=False,
-        edges_collection='edges_' + merge_function,
-        position_attribute=['center_z', 'center_y', 'center_x'])
-    logging.info("RAG DB opened")
-
-    # open block done DB
-    client = pymongo.MongoClient(db_host)
-    db = client[db_name]
-    blocks_agglomerated = ''.join([
-        'blocks_agglomerated_',
-        merge_function])
-
-    blocks_agglomerated = db[blocks_agglomerated]
-
-    client = daisy.Client()
-
-    # num_blocks = 0
-
-    # process = psutil.Process(os.getpid())
-
-    while True:
-
-        block = client.acquire_block()
-
-        #num_blocks += 1
-
-        if not block:
-            return
-
-        start = time.time()
-
-        lsd.agglomerate_in_block(
-                affs,
-                fragments,
-                rag_provider,
-                block,
-                merge_function=waterz_merge_function,
-                threshold=1.0)
-
-        #logging.info("Process %d consumes %d bytes", num_blocks, process.memory_info().rss)
-
-        document = {
-            'num_cpus': 5,
-            'queue': queue,
-            'block_id': block.block_id,
-            'read_roi': (block.read_roi.get_begin(), block.read_roi.get_shape()),
-            'write_roi': (block.write_roi.get_begin(), block.write_roi.get_shape()),
-            'start': start,
-            'duration': time.time() - start
-        }
-        blocks_agglomerated.insert(document)
-
-        client.release_block(block, 0)
 
 if __name__ == "__main__":
 
@@ -248,13 +194,7 @@ if __name__ == "__main__":
 
     start = time.time()
 
-    if len(sys.argv) == 2:
-        #run master
-        agglomerate(**config)
-
-    else:
-        #run worker
-        agglomerate_worker(**config)
+    agglomerate(**config)
 
     end = time.time()
 

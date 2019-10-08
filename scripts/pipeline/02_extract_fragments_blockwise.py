@@ -1,4 +1,5 @@
 import json
+import hashlib
 import logging
 import lsd
 import numpy as np
@@ -7,10 +8,9 @@ import daisy
 import sys
 import time
 import pymongo
-import psutil
 
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
+logging.getLogger('lsd.parallel_fragments').setLevel(logging.DEBUG)
 
 def extract_fragments(
         experiment,
@@ -25,7 +25,12 @@ def extract_fragments(
         db_host,
         db_name,
         num_workers,
+        fragments_in_xy,
         queue,
+        epsilon_agglomerate=0,
+        mask_file=None,
+        mask_dataset=None,
+        filter_fragments=0,
         **kwargs):
     '''Run agglomeration in parallel blocks. Requires that affinities have been
     predicted before.
@@ -60,24 +65,7 @@ def extract_fragments(
     logging.info("Reading affs from %s", affs_file)
     affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
 
-    # affs = affs[daisy.Roi((178120 - 2240, 146376, 465000), block_size)]
-
     network_dir = os.path.join(experiment, setup, str(iteration))
-
-    # prepare fragments dataset
-    fragments = daisy.prepare_ds(
-        fragments_file,
-        fragments_dataset,
-        affs.roi,
-        affs.voxel_size,
-        np.uint64,
-        daisy.Roi((0, 0, 0), block_size),
-        # temporary fix until
-        # https://github.com/zarr-developers/numcodecs/pull/87 gets approved
-        # (we want gzip to be the default)
-        compressor={'id': 'zlib', 'level':5}
-        )
-
 
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
@@ -90,16 +78,39 @@ def extract_fragments(
     else:
         blocks_extracted = db['blocks_extracted']
 
+    # prepare fragments dataset
+    fragments = daisy.prepare_ds(
+        fragments_file,
+        fragments_dataset,
+        affs.roi,
+        affs.voxel_size,
+        np.uint64,
+        daisy.Roi((0,0,0), block_size),
+        compressor={'id': 'zlib', 'level':5})
+
     context = daisy.Coordinate(context)
     total_roi = affs.roi.grow(context, context)
     read_roi = daisy.Roi((0,)*affs.roi.dims(), block_size).grow(context, context)
     write_roi = daisy.Roi((0,)*affs.roi.dims(), block_size)
 
     daisy.run_blockwise(
-        total_roi,
-        read_roi,
-        write_roi,
-        process_function=lambda: start_worker(sys.argv[1], network_dir, queue),
+        total_roi=total_roi,
+        read_roi=read_roi,
+        write_roi=write_roi,
+        process_function=lambda: start_worker(
+            affs_file,
+            affs_dataset,
+            fragments_file,
+            fragments_dataset,
+            db_host,
+            db_name,
+            fragments_in_xy,
+            queue,
+            network_dir,
+            epsilon_agglomerate,
+            mask_file,
+            mask_dataset,
+            filter_fragments),
         check_function=lambda b: check_block(
             blocks_extracted,
             b),
@@ -107,11 +118,32 @@ def extract_fragments(
         read_write_conflict=False,
         fit='shrink')
 
-def start_worker(config_file, network_dir, queue):
+def start_worker(
+        affs_file,
+        affs_dataset,
+        fragments_file,
+        fragments_dataset,
+        db_host,
+        db_name,
+        fragments_in_xy,
+        queue,
+        network_dir,
+        epsilon_agglomerate,
+        mask_file,
+        mask_dataset,
+        filter_fragments,
+        **kwargs):
 
     worker_id = daisy.Context.from_env().worker_id
 
+    logging.info("worker %s started...", worker_id)
+
     output_dir = os.path.join('.extract_fragments_blockwise', network_dir)
+
+    logging.info('epsilon_agglomerate: %s', epsilon_agglomerate)
+    logging.info('mask_file: %s', mask_file)
+    logging.info('mask_dataset: %s', mask_dataset)
+    logging.info('filter_fragments: %s', filter_fragments)
 
     try:
         os.makedirs(output_dir)
@@ -121,131 +153,50 @@ def start_worker(config_file, network_dir, queue):
     log_out = os.path.join(output_dir, 'extract_fragments_blockwise_%d.out' %worker_id)
     log_err = os.path.join(output_dir, 'extract_fragments_blockwise_%d.err' %worker_id)
 
+    config = {
+            'affs_file': affs_file,
+            'affs_dataset': affs_dataset,
+            'fragments_file': fragments_file,
+            'fragments_dataset': fragments_dataset,
+            'db_host': db_host,
+            'db_name': db_name,
+            'fragments_in_xy': fragments_in_xy,
+            'queue': queue,
+            'epsilon_agglomerate': epsilon_agglomerate,
+            'mask_file': mask_file,
+            'mask_dataset': mask_dataset,
+            'filter_fragments': filter_fragments
+        }
+
+    config_str = ''.join(['%s'%(v,) for v in config.values()])
+    config_hash = abs(int(hashlib.md5(config_str.encode()).hexdigest(), 16))
+
+    config_file = os.path.join(output_dir, '%d.config'%config_hash)
+
+    with open(config_file, 'w') as f:
+        json.dump(config, f)
+
+    logging.info('Running block with config %s...'%config_file)
+
+    base_dir = '.'
+    worker = 'workers/extract_fragments_worker.py'
+
     daisy.call([
         'run_lsf',
         '-c', '1',
         '-g', '0',
         '-q', queue,
         '-b',
-        '-s', 'funkey/lsd:v0.8',
-        'python', './02_extract_fragments_blockwise.py', sys.argv[1],
-        '--run-worker'],
+        # '-s', 'funkey/lsd:v0.9',
+        'python', os.path.join(base_dir, worker), config_file],
         log_out=log_out,
         log_err=log_err)
 
 def check_block(blocks_extracted, block):
 
-    # print("Checking if block %s is complete..."%block.write_roi)
-
     done = blocks_extracted.count({'block_id': block.block_id}) >= 1
 
-    # print("Block %s is %s" % (block, "done" if done else "NOT done"))
-
     return done
-
-def extract_fragments_worker(
-        affs_file,
-        affs_dataset,
-        fragments_file,
-        fragments_dataset,
-        db_host,
-        db_name,
-        fragments_in_xy,
-        queue,
-        epsilon_agglomerate=0,
-        mask_file=None,
-        mask_dataset=None,
-        **kwargs):
-    '''
-    Args:
-
-        affs_file:
-        affs_dataset:
-
-            The input affinities dataset.
-
-        fragments_in_xy (``bool``):
-
-            Extract fragments section-wise.
-
-        mask_file:
-        mask_dataset (``string``):
-
-            Where to find the affinities and mask (optional).
-    '''
-
-    logging.info("Reading affs from %s", affs_file)
-    affs = daisy.open_ds(affs_file, affs_dataset, mode='r')
-    fragments = daisy.open_ds(
-        fragments_file,
-        fragments_dataset,
-        mode='r+')
-
-    if mask_file:
-
-        logging.info("Reading mask from %s", mask_file)
-        mask = daisy.open_ds(mask_file, mask_dataset, mode='r')
-
-    else:
-
-        mask = None
-
-    # open RAG DB
-    logging.info("Opening RAG DB...")
-    rag_provider = daisy.persistence.MongoDbGraphProvider(
-        db_name,
-        host=db_host,
-        mode='r+',
-        directed=False,
-        position_attribute=['center_z', 'center_y', 'center_x']
-        )
-    logging.info("RAG DB opened")
-
-    # open block done DB
-    client = pymongo.MongoClient(db_host)
-    db = client[db_name]
-    blocks_extracted = db['blocks_extracted']
-
-    client = daisy.Client()
-
-    #num_blocks = 0
-
-    #process = psutil.Process(os.getpid())
-
-    while True:
-
-        block = client.acquire_block()
-
-        #num_blocks += 1
-
-        if not block:
-            return
-
-        start = time.time()
-
-        lsd.watershed_in_block(
-            affs,
-            block,
-            rag_provider,
-            fragments,
-            fragments_in_xy,
-            epsilon_agglomerate=epsilon_agglomerate,
-            mask=mask)
-
-        #logging.info("Process %d consumes %d bytes", num_blocks, process.memory_info().rss)
-
-        document = {
-            'num_cpus': 5,
-            'queue': queue,
-            'block_id': block.block_id,
-            'read_roi': (block.read_roi.get_begin(), block.read_roi.get_shape()),
-            'write_roi': (block.write_roi.get_begin(), block.write_roi.get_shape()),
-            'start': start,
-            'duration': time.time() - start
-        }
-        blocks_extracted.insert(document)
-
-        client.release_block(block, 0)
 
 if __name__ == "__main__":
 
@@ -256,12 +207,7 @@ if __name__ == "__main__":
 
     start = time.time()
 
-    if len(sys.argv) == 2:
-        # run the master
-        extract_fragments(**config)
-    else:
-        # run a worker
-        extract_fragments_worker(**config)
+    extract_fragments(**config)
 
     end = time.time()
 
