@@ -22,6 +22,19 @@ voxel_size = Coordinate((20, 9, 9))
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
+class ThresholdMask(BatchFilter):
+
+    def __init__(self, array, threshold):
+        self.array = array
+        self.threshold = threshold
+
+    def prepare(self, request):
+        pass
+
+    def process(self, batch, request):
+        batch[self.array].data[batch[self.array].data < self.threshold] = 0
+        batch[self.array].data[batch[self.array].data > self.threshold] = 1
+
 def block_done_callback(
         db_host,
         db_name,
@@ -95,7 +108,7 @@ def predict(
             }
         )
 
-    pipeline += IntensityScaleShift(pred_labels, 255, 0)
+    pipeline += ThresholdMask(pred_labels, 0.001)
 
     pipeline += ZarrWrite(
             dataset_names={

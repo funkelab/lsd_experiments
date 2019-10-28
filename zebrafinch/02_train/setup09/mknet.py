@@ -1,8 +1,9 @@
 import mala
+import numpy as np
 import tensorflow as tf
 import json
 
-def create_network(input_shape, name):
+def create_network(input_shape, name, threshold=False):
 
     tf.reset_default_graph()
 
@@ -48,9 +49,8 @@ def create_network(input_shape, name):
             epsilon=1e-8)
         optimizer = opt.minimize(loss)
 
-        # output_shape = output_shape[1:]
         print("input shape : %s"%(input_shape,))
-        print("Final output shape: %s"%(output_shape,))
+        print("output shape: %s"%(output_shape,))
 
         tf.train.export_meta_graph(filename=name + '.meta')
 
@@ -66,15 +66,15 @@ def create_network(input_shape, name):
             'output_shape': output_shape,
             'summary': summary.name
             }
-        config['outputs'] = {'pred_labels': {"out_dims": 1, "out_dtype": "float32"}}
+        config['outputs'] = {'pred_labels': {"out_dims": 1, "out_dtype": "uint8"}}
 
         with open(name + '.json', 'w') as f:
             json.dump(config, f)
 
 if __name__ == "__main__":
 
-    z=0
-    xy=0
+    z=12
+    xy=108
 
     create_network((84, 268, 268), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
