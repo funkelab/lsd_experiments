@@ -1,24 +1,28 @@
-import mala
 import numpy as np
 import tensorflow as tf
 import json
+import funlib.learn.tensorflow as learn
+
+## disable deprecated sigmoid loss warning
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 def create_network(input_shape, name, threshold=False):
 
     tf.reset_default_graph()
 
-    with tf.variable_scope('setup09'):
+    with tf.variable_scope('setup10'):
 
         raw = tf.placeholder(tf.float32, shape=input_shape)
         raw_batched = tf.reshape(raw, (1, 1) + input_shape)
 
-        unet, _, _ = mala.networks.unet(
+        unet, _, _ = learn.models.unet(
                 raw_batched,
                 12,
                 3,
-                [[1,3,3],[1,3,3],[3,3,3]])
+                [[1,3,3],[1,3,3],[3,3,3]],
+                constant_upsample=True)
 
-        logits, _ = mala.networks.conv_pass(
+        logits, _ = learn.models.conv_pass(
             unet,
             kernel_sizes=[1],
             num_fmaps=1,
@@ -40,7 +44,7 @@ def create_network(input_shape, name, threshold=False):
 
         pred_labels = tf.nn.sigmoid(logits)
 
-        summary = tf.summary.scalar('setup09_ce_loss', loss)
+        summary = tf.summary.scalar('setup10_ce_loss', loss)
 
         opt = tf.train.AdamOptimizer(
             learning_rate=0.5e-4,
@@ -73,9 +77,9 @@ def create_network(input_shape, name, threshold=False):
 
 if __name__ == "__main__":
 
-    z=0
-    xy=0
+    z=21
+    xy=189
 
-    create_network((84, 268, 268), 'train_net')
+    create_network((87, 295, 295), 'train_net')
     create_network((96+z, 484+xy, 484+xy), 'config')
 

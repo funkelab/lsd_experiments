@@ -35,6 +35,9 @@ def create_network(input_shape, name):
         # (1, d, h, w)
         loss_weights_embedding = tf.reshape(loss_weights, (1,) + tuple(output_shape[1:]))
 
+        print('Output shape batched: ', output_shape_batched)
+        print('GT embedding shape: ', gt_embedding.get_shape().as_list())
+
         loss = tf.losses.mean_squared_error(
             gt_embedding,
             embedding,

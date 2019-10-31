@@ -14,7 +14,35 @@ logging.basicConfig(level=logging.INFO)
 
 data_dir = '../../01_data/mask_data'
 
-samples = glob.glob(os.path.join(data_dir, '*.n5'))
+samples = [
+        'zebrafinch_mask_roi_1.n5',
+        'zebrafinch_mask_roi_3.n5',
+        'zebrafinch_mask_roi_5.n5',
+        'zebrafinch_mask_roi_8.n5',
+        'zebrafinch_mask_roi_9.n5',
+        'zebrafinch_mask_roi_10.n5',
+        'zebrafinch_mask_roi_11.n5',
+        'zebrafinch_mask_roi_12.n5',
+        'zebrafinch_mask_roi_2.n5',
+        'zebrafinch_mask_roi_4.n5',
+        'zebrafinch_mask_roi_6.n5',
+        'zebrafinch_mask_roi_7.n5'
+]
+
+probabilities = [
+        .03125,
+        .03125,
+        .03125,
+        .03125,
+        .03125,
+        .03125,
+        .03125,
+        .03125,
+        .1875,
+        .1875,
+        .1875,
+        .1875
+]
 
 
 def train_until(max_iteration):
@@ -36,7 +64,7 @@ def train_until(max_iteration):
     pred_labels = ArrayKey('PREDICTED_MASK')
     logits_gradient = ArrayKey('LOGITS_GRADIENTS')
 
-    voxel_size = Coordinate((20, 9, 9))
+    voxel_size = Coordinate((40, 36, 36))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
 
@@ -56,11 +84,11 @@ def train_until(max_iteration):
 
     data_sources = tuple(
         ZarrSource(
-            sample,
+            os.path.join(data_dir, sample),
             datasets = {
-                raw: 'volumes/raw/s0',
-                labels: 'volumes/labels/new_ids/s0',
-                mask: 'volumes/labels/mask/s0',
+                raw: 'volumes/raw/s2',
+                labels: 'volumes/labels/new_ids/s2',
+                mask: 'volumes/labels/mask/s2',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
@@ -69,6 +97,7 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
+        Pad(raw, None) + 
         Pad(labels, None) +
         Pad(mask, labels_padding) +
         RandomLocation(min_masked=0.5, mask=mask)
@@ -77,7 +106,7 @@ def train_until(max_iteration):
 
     train_pipeline = (
         data_sources +
-        RandomProvider() +
+        RandomProvider(probabilities=probabilities) +
         ElasticAugment(
             control_point_spacing=[4,4,10],
             jitter_sigma=[0,2,2],

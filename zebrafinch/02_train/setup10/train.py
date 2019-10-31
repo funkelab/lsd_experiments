@@ -36,7 +36,7 @@ def train_until(max_iteration):
     pred_labels = ArrayKey('PREDICTED_MASK')
     logits_gradient = ArrayKey('LOGITS_GRADIENTS')
 
-    voxel_size = Coordinate((20, 9, 9))
+    voxel_size = Coordinate((40, 36, 36))
     input_size = Coordinate(config['input_shape'])*voxel_size
     output_size = Coordinate(config['output_shape'])*voxel_size
 
@@ -58,9 +58,9 @@ def train_until(max_iteration):
         ZarrSource(
             sample,
             datasets = {
-                raw: 'volumes/raw/s0',
-                labels: 'volumes/labels/new_ids/s0',
-                mask: 'volumes/labels/mask/s0',
+                raw: 'volumes/raw/s2',
+                labels: 'volumes/labels/new_ids/s2',
+                mask: 'volumes/labels/mask/s2',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
@@ -69,6 +69,7 @@ def train_until(max_iteration):
             }
         ) +
         Normalize(raw) +
+        Pad(raw, None) + 
         Pad(labels, None) +
         Pad(mask, labels_padding) +
         RandomLocation(min_masked=0.5, mask=mask)

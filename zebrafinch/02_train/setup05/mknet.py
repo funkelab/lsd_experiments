@@ -140,7 +140,7 @@ if __name__ == "__main__":
     create_affs(train_input_shape, train_intermediate_shape, train_output_shape, 'train_net')
 
     test_input_shape = (96+z, 484+xy, 484+xy)
-    test_output_shape = (78, 434, 434)
+    test_output_shape = (60+z, 272+xy, 272+xy)
 
     create_affs(test_input_shape, test_input_shape, test_output_shape, 'test_net')
 
