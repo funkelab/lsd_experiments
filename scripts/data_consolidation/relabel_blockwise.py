@@ -19,8 +19,7 @@ def relabel_cc(
 
     gt = daisy.open_ds(in_file, in_ds)
 
-    read_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
-    write_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
+    write_roi = daisy.Roi((0, 0, 0), (3600, 3600, 3600))
 
     gt_ds = daisy.prepare_ds(
             out_file,
@@ -28,7 +27,8 @@ def relabel_cc(
             gt.roi,
             gt.voxel_size,
             gt.data.dtype,
-            write_roi)
+            write_roi=write_roi)
+    gt_ds.check_write_chunk_align = True
     relabel_connected_components(gt, gt_ds, write_roi.get_shape(), num_workers)
     out_data = gt_ds.to_ndarray(gt.roi)
 
