@@ -10,13 +10,13 @@ import json
 import tensorflow as tf
 import numpy as np
 import logging
+import glob
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = '../../01_data/'
-artifacts_dir = '/groups/funke/funkelab/sheridana/lsd_experiments/cremi/01_data/training/'
+data_dir = '../../01_data/combined_samples'
 
-samples = ['cutout_1_sparse.hdf']
+samples = glob.glob(os.path.join(data_dir, '*.n5'))
 
 def train_until(max_iteration):
 
@@ -33,8 +33,6 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    artifacts = ArrayKey('ARTIFACTS')
-    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
     embedding = ArrayKey('PREDICTED_EMBEDDING')
     gt_embedding = ArrayKey('GT_EMBEDDING')
     gt_embedding_scale = ArrayKey('GT_EMBEDDING_SCALE')
@@ -58,12 +56,12 @@ def train_until(max_iteration):
     })
 
     data_sources = tuple(
-        Hdf5Source(
-            os.path.join(data_dir, sample),
+        ZarrSource(
+            sample,
             datasets = {
                 raw: 'volumes/raw',
-                labels: 'volumes/labels/neuron_ids',
-                labels_mask: 'volumes/labels/mask',
+                labels: 'volumes/labels/masked_ids',
+                labels_mask: 'volumes/labels/ids_mask',
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
@@ -97,16 +95,6 @@ def train_until(max_iteration):
             mask=gt_embedding_scale,
             sigma=80,
             downsample=2) +
-        DefectAugment(
-            raw,
-            prob_missing=0.03,
-            prob_low_contrast=0.01,
-            prob_artifact=0.03,
-            artifact_source=artifact_source,
-            artifacts=artifacts,
-            artifacts_mask=artifacts_mask,
-            contrast_scale=0.5,
-            axis=0) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
