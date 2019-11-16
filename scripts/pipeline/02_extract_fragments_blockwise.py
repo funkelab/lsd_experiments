@@ -78,11 +78,16 @@ def extract_fragments(
     else:
         blocks_extracted = db['blocks_extracted']
 
+    # total_roi = daisy.Roi((0, 0, 67200), (900000, 285600, 403200))
+    # total_roi = daisy.Roi((459960, 92120, 217952), (80040, 75880, 62048))
+    # total_roi = daisy.Roi((200580, 62440, 222824), (58260, 35056, 43512))
+
     # prepare fragments dataset
     fragments = daisy.prepare_ds(
         fragments_file,
         fragments_dataset,
         affs.roi,
+        # total_roi,
         affs.voxel_size,
         np.uint64,
         daisy.Roi((0,0,0), block_size),
@@ -90,8 +95,11 @@ def extract_fragments(
 
     context = daisy.Coordinate(context)
     total_roi = affs.roi.grow(context, context)
+    # total_roi = total_roi.grow(context, context)
     read_roi = daisy.Roi((0,)*affs.roi.dims(), block_size).grow(context, context)
     write_roi = daisy.Roi((0,)*affs.roi.dims(), block_size)
+
+    num_voxels_in_block = (write_roi/affs.voxel_size).size()
 
     daisy.run_blockwise(
         total_roi=total_roi,
@@ -110,7 +118,8 @@ def extract_fragments(
             epsilon_agglomerate,
             mask_file,
             mask_dataset,
-            filter_fragments),
+            filter_fragments,
+            num_voxels_in_block),
         check_function=lambda b: check_block(
             blocks_extracted,
             b),
@@ -132,6 +141,7 @@ def start_worker(
         mask_file,
         mask_dataset,
         filter_fragments,
+        num_voxels_in_block,
         **kwargs):
 
     worker_id = daisy.Context.from_env().worker_id
@@ -165,7 +175,8 @@ def start_worker(
             'epsilon_agglomerate': epsilon_agglomerate,
             'mask_file': mask_file,
             'mask_dataset': mask_dataset,
-            'filter_fragments': filter_fragments
+            'filter_fragments': filter_fragments,
+            'num_voxels_in_block': num_voxels_in_block
         }
 
     config_str = ''.join(['%s'%(v,) for v in config.values()])
