@@ -59,8 +59,7 @@ def train_until(max_iteration):
     raw = ArrayKey('RAW')
     labels = ArrayKey('GT_LABELS')
     labels_mask = ArrayKey('GT_LABELS_MASK')
-    artifacts = ArrayKey('ARTIFACTS')
-    artifacts_mask = ArrayKey('ARTIFACTS_MASK')
+    unlabelled = ArrayKey('UNLABELLED')
     pretrained_lsd = ArrayKey('PRETRAINED_LSD')
     affs = ArrayKey('PREDICTED_AFFS')
     gt_affs = ArrayKey('GT_AFFINITIES')
@@ -79,6 +78,7 @@ def train_until(max_iteration):
     request.add(raw, sd_input_size)
     request.add(labels, output_size)
     request.add(labels_mask, output_size)
+    request.add(unlabelled, output_size)
     request.add(pretrained_lsd, pretrained_lsd_size)
     request.add(gt_affs, output_size)
     request.add(gt_affs_mask, output_size)
@@ -95,18 +95,20 @@ def train_until(max_iteration):
             datasets = {
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/masked_ids',
-                labels_mask: 'volumes/labels/ids_mask',
+                labels_mask: 'volumes/labels/mask',
+                unlabelled: 'volumes/labels/ids_mask'
             },
             array_specs = {
                 raw: ArraySpec(interpolatable=True),
                 labels: ArraySpec(interpolatable=False),
-                labels_mask: ArraySpec(interpolatable=False)
+                labels_mask: ArraySpec(interpolatable=False),
+                unlabelled: ArraySpec(interpolatable=False)
             }
         ) +
         Normalize(raw) +
         Pad(labels, context) +
         Pad(labels_mask, context) +
-        RandomLocation(mask=labels_mask)
+        RandomLocation(mask=unlabelled)
         for sample in samples
     )
 
@@ -129,6 +131,7 @@ def train_until(max_iteration):
             labels=labels,
             affinities=gt_affs,
             labels_mask=labels_mask,
+            unlabelled=unlabelled,
             affinities_mask=gt_affs_mask) +
         BalanceLabels(
             gt_affs,
@@ -174,6 +177,9 @@ def train_until(max_iteration):
         Snapshot({
                 raw: 'volumes/raw',
                 labels: 'volumes/labels/neuron_ids',
+                labels_mask: 'volumes/labels/labels_mask',
+                gt_affs_mask: 'volumes/labels/gt_affs_mask',
+                unlabelled: 'volumes/labels/unlabelled',
                 pretrained_lsd: 'volumes/labels/pretrained_lsd',
                 gt_affs: 'volumes/labels/gt_affinities',
                 affs: 'volumes/labels/pred_affinities',
