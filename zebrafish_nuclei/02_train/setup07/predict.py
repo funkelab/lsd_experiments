@@ -18,7 +18,7 @@ input_shape = Coordinate(net_config['input_shape'])
 output_shape = Coordinate(net_config['output_shape'])
 
 # nm
-voxel_size = Coordinate((20, 9, 9))
+voxel_size = Coordinate((60, 56, 56))
 input_size = input_shape*voxel_size
 output_size = output_shape*voxel_size
 
