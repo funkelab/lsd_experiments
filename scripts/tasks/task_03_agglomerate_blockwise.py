@@ -153,14 +153,17 @@ class AgglomerateTask(daisy.Task):
 
         logging.info('Running block with config %s...'%config_file)
 
+        base_dir = '/groups/funke/funkelab/sheridana/lsd_experiments'
+        worker = 'scripts/tasks/workers/agglomerate_worker.py'
+
         daisy.call([
             'run_lsf',
             '-c', '1',
             '-g', '0',
             '-q', self.queue,
-            # '-b',
+            '-b',
             '-s', 'funkey/lsd:v0.8',
-            'python', 'workers/agglomerate_worker.py', config_file,
+            'python', os.path.join(base_dir, worker), config_file,
             '--run_worker'],
             log_out=log_out,
             log_err=log_err)

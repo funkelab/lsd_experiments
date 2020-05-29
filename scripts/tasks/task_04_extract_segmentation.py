@@ -8,7 +8,7 @@ import pymongo
 import sys
 import task_helper
 import time
-from task_03_agglomerate_blockwise import AgglomerateTask
+from task_empty_task import EmptyTask
 from funlib.segment.graphs.impl import connected_components
 from funlib.segment.arrays import replace_values
 
@@ -64,30 +64,7 @@ class SegmentationTask(daisy.Task):
                 'center_y',
                 'center_x'])
 
-        roi = daisy.Roi(
-            self.roi_offset,
-            self.roi_shape)
-
-        node_attrs, edge_attrs = graph_provider.read_blockwise(
-            roi,
-            block_size=daisy.Coordinate((2000, 2000, 2000)),
-            num_workers=self.num_workers)
-
-        logging.info("Read graph in %.3fs", time.time() - start)
-
-        if 'id' not in node_attrs:
-            logging.info('No nodes found in roi %s' % roi)
-            return
-
-        logging.info('id dtype: %s', node_attrs['id'].dtype)
-        logging.info('edge u  dtype: %s', edge_attrs['u'].dtype)
-        logging.info('edge v  dtype: %s', edge_attrs['v'].dtype)
-
-        self.nodes = node_attrs['id']
-        self.edges = np.stack([edge_attrs['u'].astype(np.uint64), edge_attrs['v'].astype(np.uint64)], axis=1)
-        self.scores = edge_attrs['merge_score'].astype(np.float32)
-
-        logging.info("Complete RAG contains %d nodes, %d edges", len(self.nodes), len(self.edges))
+        self.total_roi = self.fragments.roi
 
         self.read_roi = daisy.Roi((0, 0, 0), (2000, 2000, 2000))
         self.write_roi = daisy.Roi((0, 0, 0), (2000, 2000, 2000))
@@ -100,8 +77,31 @@ class SegmentationTask(daisy.Task):
                 dtype=np.uint64,
                 write_roi=self.write_roi)
 
+        agglom_blocks = 'blocks_agglomerated_hist_quant_50'
+
+        # if agglom_blocks in db.list_collection_names():
+            # if db[agglom_blocks].count() >= 1:
+        node_attrs, edge_attrs = graph_provider.read_blockwise(
+            self.total_roi,
+            block_size=self.read_roi.get_end(),
+            num_workers=self.num_workers)
+
+        if 'id' not in node_attrs:
+            logging.info('No nodes found in roi %s' % self.read_roi)
+            return
+
+        logging.info('id dtype: %s', node_attrs['id'].dtype)
+        logging.info('edge u  dtype: %s', edge_attrs['u'].dtype)
+        logging.info('edge v  dtype: %s', edge_attrs['v'].dtype)
+
+        self.nodes = node_attrs['id']
+        self.edges = np.stack([edge_attrs['u'].astype(np.uint64), edge_attrs['v'].astype(np.uint64)], axis=1)
+        self.scores = edge_attrs['merge_score'].astype(np.float32)
+
+        logging.info("Complete RAG contains %d nodes, %d edges", len(self.nodes), len(self.edges))
+
         self.schedule(
-            roi,
+            self.total_roi,
             self.read_roi,
             self.write_roi,
             process_function=self.segment_in_block,
@@ -144,7 +144,7 @@ class SegmentationTask(daisy.Task):
         return done
 
     def requires(self):
-        return [AgglomerateTask(global_config=self.global_config)]
+        return [EmptyTask(global_config=self.global_config)]
 
 if __name__ == "__main__":
 
