@@ -129,8 +129,8 @@ def create_config(input_shape, output_shape, name):
 
 if __name__ == "__main__":
 
-    z=18
-    xy=162
+    z=0
+    xy=0
 
     train_input_shape = (120, 484, 484)
     train_intermediate_shape = (84, 268, 268)

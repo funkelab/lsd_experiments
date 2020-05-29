@@ -70,7 +70,7 @@ def create_network(input_shape, name, threshold=False):
             'output_shape': output_shape,
             'summary': summary.name
             }
-        config['outputs'] = {'pred_labels': {"out_dims": 1, "out_dtype": "uint8"}}
+        config['outputs'] = {'pred_labels': {"out_dims": 1, "out_dtype": "float32"}}
 
         with open(name + '.json', 'w') as f:
             json.dump(config, f)

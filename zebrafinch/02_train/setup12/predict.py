@@ -107,7 +107,7 @@ def predict(
             }
         )
 
-    pipeline += ThresholdMask(pred_labels, 0.001)
+    pipeline += ThresholdMask(pred_labels, 0.01)
 
     pipeline += ZarrWrite(
             dataset_names={
