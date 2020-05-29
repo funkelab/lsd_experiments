@@ -51,8 +51,6 @@ def block_done_callback(
 
 def predict(
         iteration,
-        raw_file,
-        raw_dataset,
         auto_file,
         auto_dataset,
         out_file,
@@ -62,34 +60,18 @@ def predict(
         worker_config,
         **kwargs):
 
-    raw = ArrayKey('RAW')
     lsds = ArrayKey('PRETRAINED_LSDS')
     affs = ArrayKey('AFFS')
 
-    print('Raw file is: %s, Raw dataset is: %s'%(raw_file, raw_dataset))
     print('Auto file is: %s, Auto dataset is: %s'%(auto_file, auto_dataset))
 
     chunk_request = BatchRequest()
-    chunk_request.add(raw, input_size)
     chunk_request.add(lsds, input_size)
     chunk_request.add(affs, output_size)
 
     pipeline = (
             (
-                ZarrSource(
-                    raw_file,
-                    datasets = {
-                        raw: raw_dataset
-                    },
-                    array_specs = {
-                        raw: ArraySpec(interpolatable=True)
-                    }
-                ) +
-                Pad(raw, size=None) +
-                Normalize(raw) +
-                IntensityScaleShift(raw, 2,-1),
-
-                ZarrSource(
+               ZarrSource(
                     auto_file,
                     datasets = {
                         lsds: auto_dataset
@@ -101,7 +83,6 @@ def predict(
                 Pad(lsds, size=None) +
                 Normalize(lsds)
             ) +
-            MergeProvider() +
             Predict(
                 checkpoint=os.path.join(
                     setup_dir,
@@ -110,7 +91,6 @@ def predict(
                 max_shared_memory=(2*1024*1024*1024),
                 inputs={
                     net_config['pretrained_lsd']: lsds,
-                    net_config['raw']: raw
                 },
                 outputs={
                     net_config['affs']: affs
@@ -127,7 +107,6 @@ def predict(
             DaisyRequestBlocks(
                 chunk_request,
                 roi_map={
-                    raw: 'read_roi',
                     lsds: 'read_roi',
                     affs: 'write_roi'
                 },
