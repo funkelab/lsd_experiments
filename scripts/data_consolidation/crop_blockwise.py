@@ -31,8 +31,8 @@ def crop(
 
     crop_roi = daisy.Roi((roi_offset), (roi_shape))
 
-    read_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
-    write_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
+    read_roi = daisy.Roi((0, 0, 0), (3600, 3600, 3600))
+    write_roi = read_roi
 
     logging.info('Creating cropped dataset...')
 

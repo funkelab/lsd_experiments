@@ -1,83 +1,76 @@
+from skimage import io
 import daisy
-import logging
-import json
+import glob
 import numpy as np
 import os
 import sys
-from skimage import io
 
-def image_to_array(path_to_images):
-    l = []
+voxel_size = daisy.Coordinate((60, 56, 56))
+raw_dir = sys.argv[1]
+out_file = '/nrs/funke/sheridana/zebrafish_nuclei/130201zf142.zarr'
 
-    for f in sorted(os.listdir(path_to_images)):
+def get_total_roi(image_dir):
 
-        print('Appending %s to list' %f)
+    files = glob.glob(os.path.join(image_dir, '*.png'))
 
-        l.append(io.imread(os.path.join(path_to_images, f)))
+    section_numbers = sorted([ int(f.split('/')[-1][0:5]) for f in files ])
 
-    return np.stack(l, axis=0)
+    begin = min(section_numbers)
+    end = max(section_numbers) + 1
 
-def write_in_block(
-        block,
-        array,
-        ds):
+    shape_yx = np.array(io.imread(files[0])).shape
 
-    print('Writing data to block %s' %block.read_roi)
+    roi = daisy.Roi(
+        (0, 0, 0),
+        voxel_size*(end - begin, shape_yx[0], shape_yx[1]))
 
-    array = array.to_ndarray(block.write_roi)
+    print("Total ROI: %s" % roi)
 
-    ds[block.write_roi] = array
+    return roi, begin
 
-def write_to_ds(
-        path_to_images,
+def fill_section(ds, image_dir, block, image_index_offset=0):
+
+    # 0-based image index
+    image_index = block.read_roi.get_offset()[0]/ds.voxel_size[0]
+    image_index += image_index_offset
+
+    image_file = os.path.join(
+        image_dir,
+        "%05d.png" % image_index)
+
+    print("Copying section %d..." % image_index)
+
+    try:
+        ds[block.write_roi] = np.array(io.imread(image_file))[np.newaxis,:]
+    except IOError:
+        print("Skipping section %d, image file does not exist." % image_index)
+        pass
+
+if __name__ == "__main__":
+
+    total_roi, image_index_offset = get_total_roi(raw_dir)
+
+    raw_ds = daisy.prepare_ds(
         out_file,
-        out_ds,
-        num_workers):
+        'volumes/labels/mask',
+        total_roi=total_roi,
+        voxel_size=voxel_size,
+        write_size=voxel_size*(1, 256, 256),
+        dtype=np.uint8)
 
-    print('Converting images to numpy array...')
+    section_roi = daisy.Roi(
+        (0, 0, 0),
+        (voxel_size[0],) + total_roi.get_shape()[1:])
 
-    array = image_to_array(path_to_images)
-
-    voxel_size = [60,56,56]
-
-    shape = [i*j for i,j in zip(list(array.shape), voxel_size)]
-
-    total_roi = daisy.Roi((0,0,0), tuple(shape))
-
-    array = daisy.Array(array, total_roi, daisy.Coordinate(voxel_size)) 
-
-    read_roi = daisy.Roi((0, 0, 0), (2520, 2520, 2520))
-    write_roi = daisy.Roi((0, 0, 0), (2520, 2520, 2520))
-
-    print('Creating dataset...')
-
-    ds = daisy.prepare_ds(
-            out_file,
-            out_ds,
-            total_roi,
-            voxel_size,
-            dtype=array.dtype,
-            write_roi=write_roi)
-
-    print('Writing to dataset...')
+    print("Copying in chunks of %s" % section_roi)
 
     daisy.run_blockwise(
-            total_roi,
-            read_roi,
-            write_roi,
-            process_function=lambda b: write_in_block(
-                b,
-                array,
-                ds),
-            fit='shrink',
-            num_workers=num_workers,
-            read_write_conflict=False)
-
-
-if __name__ == '__main__':
-
-    write_to_ds(
-            sys.argv[1],
-            sys.argv[2],
-            'volumes/raw',
-            1)
+        total_roi=total_roi,
+        read_roi=section_roi,
+        write_roi=section_roi,
+        process_function=lambda b: fill_section(
+            raw_ds,
+            raw_dir,
+            b,
+            image_index_offset),
+        num_workers=40)

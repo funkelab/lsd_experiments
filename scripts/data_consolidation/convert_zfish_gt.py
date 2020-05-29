@@ -3,14 +3,24 @@ import daisy
 import glob
 import numpy as np
 import os
+import sys
 
 voxel_size = daisy.Coordinate((60, 56, 56))
-raw_dir = '/nrs/funke/sheridana/zebrafish_nuclei/130201zf142_XY_56.4x56.4x60.0/'
-out_file = '/nrs/funke/sheridana/zebrafish_nuclei/130201zf142.zarr'
+# raw_dir = '/nrs/funke/sheridana/zebrafish_nuclei/130201zf142_XY_56.4x56.4x60.0/'
+# out_file = '/nrs/funke/sheridana/zebrafish_nuclei/130201zf142.zarr'
+
+raw_dir = sys.argv[1]
+out_file = '/nrs/funke/sheridana/zebrafish_nuclei/gt_data.zarr'
 
 def get_total_roi(image_dir):
 
-    files = glob.glob(os.path.join(image_dir, '*.png'))
+    files = []
+
+    for f in os.listdir(image_dir):
+
+        print('Appending %s to list' %f)
+
+        files.append(os.path.join(image_dir, f))
 
     section_numbers = sorted([ int(f.split('/')[-1][0:5]) for f in files ])
 
@@ -51,11 +61,11 @@ if __name__ == "__main__":
 
     raw_ds = daisy.prepare_ds(
         out_file,
-        'volumes/raw',
+        'volumes/%s/labels/neuron_ids'%sys.argv[2],
         total_roi=total_roi,
         voxel_size=voxel_size,
         write_size=voxel_size*(1, 256, 256),
-        dtype=np.uint8)
+        dtype=np.uint64)
 
     section_roi = daisy.Roi(
         (0, 0, 0),

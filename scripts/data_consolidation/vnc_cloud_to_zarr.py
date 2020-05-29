@@ -36,9 +36,13 @@ def fetch_in_block(
     y_start, y_end = block_start[1], block_end[1]
     x_start, x_end = block_start[2], block_end[2]
 
+    print(x_start, y_start, z_start)
+    print(x_end, y_end, z_end)
     raw = raw_data[x_start:x_end, y_start:y_end, z_start:z_end]
 
-    raw = np.array(np.transpose(raw[...,0], [2,1,0]))
+    raw = np.array(np.transpose(raw))
+
+    raw = raw[0,...]
 
     out_ds[block.write_roi] = raw
 
@@ -54,28 +58,15 @@ def get_cloud_roi(cloud_vol):
 def fetch(
         in_vol,
         voxel_size,
+        roi_offset,
+        roi_shape,
         out_file,
         out_ds,
-        num_workers,
-        roi_offset=None,
-        roi_shape=None)
-
-    raw_vol = cloudvolume.CloudVolume(
-            in_vol,
-            bounded=True,
-            progress=True)
-
-    info = raw_vol.info
-
-    for scale in info['scales']:
-        if not scale['voxel_offset']:
-            scale['voxel_offset'] = [0,0,0]
-
-    raw_vol.info = info
+        num_workers):
 
     total_roi = daisy.Roi((roi_offset), (roi_shape))
 
-    read_roi = daisy.Roi((0, 0, 0), (3600, 3600, 3600))
+    read_roi = daisy.Roi((0, 0, 0), (4500, 3200, 3200))
     write_roi = read_roi
 
     logging.info('Creating out dataset...')
@@ -85,7 +76,7 @@ def fetch(
             out_ds,
             total_roi,
             voxel_size,
-            dtype=np.uint64,
+            dtype=np.uint8,
             write_roi=write_roi)
 
     logging.info('Writing to dataset...')
@@ -97,35 +88,46 @@ def fetch(
             process_function=lambda b: fetch_in_block(
                 b,
                 voxel_size,
-                raw_vol,
+                in_vol,
                 raw_out),
             fit='shrink',
             num_workers=num_workers)
 
 if __name__ == '__main__':
 
-    # in_vol = "https://storage.googleapis.com/j0126-nature-methods-data/GgwKmcKgrcoNxJccKuGIzRnQqfit9hnfK1ctZzNbnuU/rawdata_realigned"
-
-    in_vol = "https://storage.googleapis.com/j0126-nature-methods-data/GgwKmcKgrcoNxJccKuGIzRnQqfit9hnfK1ctZzNbnuU/ffn_segmentation"
+    in_vol="https://storage.googleapis.com/zetta_lee_fly_vnc_001_cutouts/005/image"
 
     raw_vol = cloudvolume.CloudVolume(
             in_vol,
             bounded=True,
-            progress=True)
+            progress=True,
+            fill_missing=True)
 
     info = raw_vol.info
 
-    for scale in info['scales']:
-        scale['voxel_offset'] = [0, 0, 0]
+    # print(info)
+
+    # for scale in info['scales']:
+       # scale['voxel_offset'] = [0, 0, 0]
 
     raw_vol.info = info
 
-    voxel_size = daisy.Coordinate((20,9,9))
-    roi_offset = [0, 0, 0]
-    roi_shape = [114000, 97920, 95616]
+    print(raw_vol.info)
+
+    size = raw_vol.info['scales'][0]['size'][::-1]
+    print(size)
+
+    voxel_size = daisy.Coordinate((45,32,32))
+    roi_offset = [2000, 12288, 6144]
+    roi_offset = [i*j for i,j in zip(roi_offset, [45,32,32])]
+    # roi_shape = []
+    size = [256, 1024, 1024]
+    roi_shape = [i*j for i,j in zip(size, [45,32,32])]
+
+    print(roi_offset, roi_shape)
 
     out_file = sys.argv[1]
-    out_ds = 'volumes/ffn_segmentation'
+    out_ds = 'volumes/raw'
 
     fetch(
         raw_vol,

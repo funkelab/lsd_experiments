@@ -56,12 +56,14 @@ def mask_neurons(
     # print('Loaded mask')
 
     #load neuron dataset to filter
-    seg = daisy.open_ds(in_file, in_ds)
+    try:
+        seg = daisy.open_ds(in_file, in_ds)
+    except:
+        seg = daisy.open_ds(in_file, in_ds + '/s0')
     print('Loaded neuron ids')
 
-    read_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
-    write_roi = daisy.Roi((0, 0, 0), (2048, 2048, 2048))
-
+    read_roi = daisy.Roi((0, 0, 0), (3600, 3600, 3600))
+    write_roi = read_roi
     print('Read roi is %s, write roi is %s' %(read_roi, write_roi))
 
     #prepare the masked id dataset

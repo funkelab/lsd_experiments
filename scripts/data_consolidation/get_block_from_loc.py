@@ -15,14 +15,14 @@ def convert_vox_to_world(coord, voxel_size):
 if __name__ == '__main__':
 
     db_host =  "mongodb://lsdAdmin:C20H25N3O@funke-mongodb3.int.janelia.org:27017/admin?replicaSet=rsLsd"
-    db_name = 'zebrafinch_auto_basic_163k_testing_masked'
+    db_name = 'zebrafinch_auto_basic_163k_testing_masked_debug_ff'
 
     client = pymongo.MongoClient(db_host)
     db = client[db_name]
     collection = db['blocks_extracted']
 
     voxel_size = [9,9,20]
-    point = convert_vox_to_world([5350, 5450, 2850], voxel_size)
+    point = convert_vox_to_world([5947, 5771, 2794], voxel_size)
     print(point)
 
     for doc in collection.find():

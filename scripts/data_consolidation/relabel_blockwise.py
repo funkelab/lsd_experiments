@@ -21,6 +21,8 @@ def relabel_cc(
 
     write_roi = daisy.Roi((0, 0, 0), (3600, 3600, 3600))
 
+    # write_roi = gt.roi
+
     gt_ds = daisy.prepare_ds(
             out_file,
             out_ds,
@@ -28,15 +30,28 @@ def relabel_cc(
             gt.voxel_size,
             gt.data.dtype,
             write_roi=write_roi)
-    gt_ds.check_write_chunk_align = True
+    # gt_ds.check_write_chunk_align = True
     relabel_connected_components(gt, gt_ds, write_roi.get_shape(), num_workers)
     out_data = gt_ds.to_ndarray(gt.roi)
 
 if __name__ == '__main__':
 
-    config_file = sys.argv[1]
+    # config_file = sys.argv[1]
 
-    with open(config_file, 'r') as f:
-        config = json.load(f)
+    # with open(config_file, 'r') as f:
+        # config = json.load(f)
 
-    relabel_cc(**config)
+    # relabel_cc(**config)
+
+    in_file = sys.argv[1]
+    out_file = sys.argv[1]
+    in_ds = 'volumes/debug_seg/s0'
+    out_ds = 'volumes/debug_seg_relabelled'
+    num_workers=10
+
+    relabel_cc(
+            in_file,
+            out_file,
+            in_ds,
+            out_ds,
+            num_workers)
