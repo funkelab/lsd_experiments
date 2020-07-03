@@ -60,28 +60,28 @@ def predict(
         worker_config,
         **kwargs):
 
-    lsds = ArrayKey('PRETRAINED_LSDS')
-    affs = ArrayKey('AFFS')
+    pretrained_affs = ArrayKey('PRETRAINED_AFFS')
+    auto_affs = ArrayKey('AUTO_AFFS')
 
     print('Auto file is: %s, Auto dataset is: %s'%(auto_file, auto_dataset))
 
     chunk_request = BatchRequest()
-    chunk_request.add(lsds, input_size)
-    chunk_request.add(affs, output_size)
+    chunk_request.add(pretrained_affs, input_size)
+    chunk_request.add(auto_affs, output_size)
 
     pipeline = (
             (
                 ZarrSource(
                     auto_file,
                     datasets = {
-                        lsds: auto_dataset
+                        pretrained_affs: auto_dataset
                     },
                     array_specs = {
-                        lsds: ArraySpec(interpolatable=True)
+                        pretrained_affs: ArraySpec(interpolatable=True)
                     }
                 ) +
-                Pad(lsds, size=None) +
-                Normalize(lsds)
+                Pad(pretrained_affs, size=None) +
+                Normalize(pretrained_affs)
             ) +
             Predict(
                 checkpoint=os.path.join(
@@ -90,16 +90,16 @@ def predict(
                 graph=os.path.join(setup_dir, 'test_net.meta'),
                 max_shared_memory=(2*1024*1024*1024),
                 inputs={
-                    net_config['pretrained_lsd']: lsds
+                    net_config['pretrained_affs']: pretrained_affs
                 },
                 outputs={
-                    net_config['affs']: affs
+                    net_config['auto_affs']: auto_affs
                 }
             ) +
-            IntensityScaleShift(affs, 255, 0) +
+            IntensityScaleShift(auto_affs, 255, 0) +
             ZarrWrite(
                 dataset_names={
-                    affs: out_dataset,
+                    auto_affs: out_dataset,
                 },
                 output_filename=out_file
             ) +
@@ -107,8 +107,8 @@ def predict(
             DaisyRequestBlocks(
                 chunk_request,
                 roi_map={
-                    lsds: 'read_roi',
-                    affs: 'write_roi'
+                    pretrained_affs: 'read_roi',
+                    auto_affs: 'write_roi'
                 },
                 num_workers=worker_config['num_cache_workers'],
                 block_done_callback=lambda b, s, d: block_done_callback(
