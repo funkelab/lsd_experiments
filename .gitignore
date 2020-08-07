@@ -28,3 +28,4 @@ dask-worker-space
 *.csv
 *.png
 *.blend
+*core*
