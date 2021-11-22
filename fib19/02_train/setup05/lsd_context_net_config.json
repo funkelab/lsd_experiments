@@ -1,1 +1,0 @@
-{"optimizer": "Adam", "loss_weights_affs": "Placeholder_5:0", "affs": "Squeeze_1:0", "input_shape": [196, 196, 196], "raw": "Placeholder:0", "gt_affs": "Placeholder_3:0", "loss": "add:0", "loss_weights_embedding": "Placeholder_4:0", "gt_embedding": "Placeholder_2:0", "embedding": "Squeeze:0", "output_shape": [92, 92, 92], "pretrained_lsd": "Placeholder_1:0"}

@@ -29,3 +29,5 @@ dask-worker-space
 *.png
 *.blend
 *core*
+src
+*blend*
