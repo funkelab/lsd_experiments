@@ -1,0 +1,93 @@
+Hemi brain throughput numbers
+
+##############################
+Training
+
+500k iterations in ~1 week on 1 gpu/5cpus (for reference ffn trained in one week on 32 gpus)
+
+##############################
+
+Inference
+
+(numbers for vanilla affs net but pretty much the same for mtlsd)
+
+21.8 x 21.8 x 21.8 micron (10362.232 cubic micron cube) at 8 nm voxel res
+
+1728 blocks @ 2816 x 2816 x 2816 read roi / 1984 x 1984 x 1984 write_roi
+
+4 gpu tesla large (v100s) 
+
+1662 total seconds (27.7 minutes) --> 25.7 actual processing minutes (2 minutes for job acceptance and initialization)
+
+10362.232 cubic microns / (1542 seconds * 4 gpus) = 1.68 cubic microns per second*gpu inference rate
+
+##############################
+
+Watershed (no epsilon agglomerate step, fragments in xy = False)
+
+512 blocks @ 3000 x 3000 x 3000 read/write roi
+
+40 CPUS (Normal queue)
+
+1031.25 seconds (17.18 minutes)
+
+10362.232 / (1031.25 * 40) = 0.25 cm per s*cpu
+
+##############################
+
+Agglomeration (hist quant 50)
+
+Same block size & num cpus as watershed
+
+393.51 seconds (6.56 mins)
+
+10362.232 / (393.51 * 40) = 0.66 cm per s*cpu
+
+##############################
+
+LUT creation / storage (single threshold)
+
+27 blocks @ 10000 x 10000 x 10000 graph block read size
+
+32 cpus (normal queue)
+
+32.962 seconds
+
+10362.232 / (32.962 * 32) = 9.82 cm per s*cpu
+
+##############################
+
+Segmentation Extraction (single threshold)
+
+512 blocks @ 3000 x 3000 x 3000 read/write roi
+
+32 cpus (normal queue)
+
+140.607 seconds
+
+10362.232 / (140.607 * 32) = 2.3 cm per s*cpu
+
+##############################
+
+Total time (inference through segmentation): 3140.43 seconds (52.3 minutes)
+
+##############################
+
+Whole Hemi brain: 2.5x10^7 cubic microns
+
+Given a conservative amount of resources:
+
+~80 rtx gpus (160 total in rtx queue)
+~1800 cpus (3584 total)
+
+(not taking into account edge graph size/ lut creation might be a challenge with storing?)
+
+Time for task in seconds = 1/throughput * (dataset size / number of resources)
+
+Total inference time: 186011 seconds / 3100 minutes / 52 hours / 2.15 days
+Total watershed time: 55555 seconds / 926 minutes / 15.4 hours / 0.64 days
+Total agglomeration time: 21107 seconds / 351.8 minutes / 5.86 hours / 0.24 days
+Total LUT creation time: 1414 seconds / 23.57 minutes / 0.39 hours / 0.016 days
+Total segmentation extraction time: 6038.6 seconds / 100.6 minutes / 1.68 hours / 0.069 days
+
+Hypothetical inference through segmentation timeline on given resources: 270125.6 seconds / 4502.1 minutes / 75 hours / 3.12 days (one weekend)

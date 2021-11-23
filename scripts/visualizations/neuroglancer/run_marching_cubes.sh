@@ -1,0 +1,1 @@
+python marching_cubes.py /nrs/funke/sheridana/full_calyx_glia_masking/setup189_p/400000/calyx.zarr volumes/segmentation_30/s2 /nrs/funke/buhmannj/fafb/visualization/synapse_export_lsd/pair_of_neurons_v2/ /groups/funke/home/buhmannj/src/synful_experiments/scripts/configs/evaluate_lsd_calyx.json

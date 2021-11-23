@@ -17,7 +17,6 @@ snapshots/
 notes
 *.log
 *.data*
-*.json
 *.npz
 !fib19/03_predict/setup04/*.json
 log/
@@ -31,3 +30,9 @@ dask-worker-space
 *core*
 src
 *blend*
+configs
+*json*
+loops
+*tmp*
+figures
+*plots

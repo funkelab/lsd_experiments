@@ -1,0 +1,27 @@
+# hemi brain notes
+
+raw = 'emdata3:8600', 'a89e', 'grayscale'
+voxel_classes = 'emdata4:8900', '36b0', 'voxel-classes'
+gt = 'emdata4:8900', '3c281', 'segmentation'
+ffn = 'emdata2: 7900', 'ac901', 'segmentation'
+neuropil_mask = 'emdata4:8900', '3c281', 'LH', format='mask'
+
+roi_1
+
+offset: [17400, 25440, 24600]
+shape: [15000, 15000, 15000]
+
+roi_2
+
+offset: [18600, 23800, 26600]
+shape: [25000, 25000, 25000]
+
+roi_3
+
+offset: [19000, 24800, 22200]
+shape: [20000, 20000, 20000]
+
+lh_roi
+
+offset: [9000, 17000, 4000]
+shape: [20000, 20000, 20000]
